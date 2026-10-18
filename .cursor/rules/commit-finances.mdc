@@ -1,0 +1,21 @@
+---
+description: Commit e push de tudo que mudar neste repositório
+alwaysApply: true
+---
+
+# Commit no Finances
+
+Depois de cada alteração pedida, commit e push em `vandersonMeskaLiber/finances`, branch `main`.
+
+Remote: `https://github.com/vandersonMeskaLiber/finances.git`
+
+- A mensagem descreve o porquê, em português, sem o formato de release do LIBER.
+- Não incluir `data/`, segredos nem `finances.db`.
+- Não alterar a configuração do Git.
+- O push usa a conta `vandersonMeskaLiber`. O chaveiro desta máquina autentica como `vandersonmeska` e recebe 403. Enviar com:
+
+```bash
+git -c credential.helper= -c credential.helper='!gh auth git-credential' push origin main
+```
+
+- Se o login do `gh` não for `vandersonMeskaLiber`, parar e pedir `gh auth login` antes do push.
