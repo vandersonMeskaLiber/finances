@@ -88,6 +88,45 @@ class RequirementTests(unittest.TestCase):
         self.assertEqual(single["amount"], 15000)
         self.assertEqual(changed["amount"], 15000)
 
+    def test_week_and_day_repeat(self):
+        weekly = db.create_series({
+            "context": "pf", "direction": "saida", "account_id": self.account["id"],
+            "category_id": self.expense["id"], "amount": 2500, "frequency": "week",
+            "start_on": "2026-01-30", "count": 3, "description": "Feira",
+        })
+        self.assertEqual(
+            [item["occurred_on"] for item in weekly["occurrences"]],
+            ["2026-01-30", "2026-02-06", "2026-02-13"],
+        )
+        daily = db.create_series({
+            "context": "pf", "direction": "entrada", "account_id": self.account["id"],
+            "category_id": self.kind["id"], "amount": 100, "frequency": "day",
+            "start_on": "2026-01-30", "count": 3, "description": "Diária", "status": "efetivado",
+        })
+        self.assertEqual(
+            [item["occurred_on"] for item in daily["occurrences"]],
+            ["2026-01-30", "2026-01-31", "2026-02-01"],
+        )
+        self.assertEqual(db.get_transaction(daily["occurrences"][0]["id"])["status"], "efetivado")
+        self.assertEqual(db.get_transaction(daily["occurrences"][1]["id"])["status"], "previsto")
+        self.assertEqual(db.get_transaction(daily["occurrences"][0]["id"])["series_frequency"], "day")
+        db.update_transaction(weekly["occurrences"][0]["id"], {
+            "occurred_on": "2026-01-31", "amount": 3000,
+            "account_id": self.account["id"], "category_id": self.expense["id"],
+        }, "all")
+        moved = db.get_series(weekly["id"])
+        self.assertEqual(
+            [item["occurred_on"] for item in moved["occurrences"]],
+            ["2026-01-31", "2026-02-07", "2026-02-14"],
+        )
+        self.assertEqual(moved["occurrences"][2]["amount"], 3000)
+        with self.assertRaises(ValueError):
+            db.create_series({
+                "context": "pf", "direction": "saida", "account_id": self.account["id"],
+                "category_id": self.expense["id"], "amount": 100, "frequency": "ano",
+                "start_on": "2026-01-30", "count": 2,
+            })
+
     def test_price_schedule_ends_at_zero(self):
         rows = db.build_schedule(2_000_000, Decimal("0.0199"), 36, "price", "2026-11-10")
         self.assertEqual(rows[-1]["balance"], 0)

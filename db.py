@@ -89,6 +89,8 @@ def init_db():
                 description TEXT NOT NULL DEFAULT '',
                 start_month TEXT NOT NULL,
                 month_count INTEGER,
+                frequency TEXT NOT NULL DEFAULT 'month',
+                start_on TEXT,
                 active INTEGER NOT NULL DEFAULT 1,
                 loan_id INTEGER,
                 created_at TEXT NOT NULL
@@ -189,6 +191,11 @@ def init_db():
         user_columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)")}
         if "last_context" not in user_columns:
             conn.execute("ALTER TABLE users ADD COLUMN last_context TEXT NOT NULL DEFAULT 'pf'")
+        series_columns = {row["name"] for row in conn.execute("PRAGMA table_info(series)")}
+        if "frequency" not in series_columns:
+            conn.execute("ALTER TABLE series ADD COLUMN frequency TEXT NOT NULL DEFAULT 'month'")
+        if "start_on" not in series_columns:
+            conn.execute("ALTER TABLE series ADD COLUMN start_on TEXT")
 
 
 def now():
@@ -394,6 +401,54 @@ def shift_month(year, mon, offset):
 def occurrence_date(year, mon, day):
     last = calendar.monthrange(year, mon)[1]
     return date(year, mon, min(int(day), last))
+
+
+REPEAT_FREQUENCIES = ("month", "week", "day")
+REPEAT_DEFAULT = {"month": 60, "week": 52, "day": 30}
+REPEAT_UNIT = {"month": "meses", "week": "semanas", "day": "dias"}
+
+
+def _repeat_count(payload, frequency):
+    raw = payload.get("count", payload.get("month_count"))
+    if raw in ("", None):
+        return None
+    try:
+        count = int(raw)
+    except (TypeError, ValueError):
+        raise ValueError("A quantidade de repetições é inválida.") from None
+    if count < 1 or count > 480:
+        raise ValueError(f"A quantidade de {REPEAT_UNIT[frequency]} precisa ficar entre 1 e 480.")
+    return count
+
+
+def _series_anchor(payload, frequency):
+    if payload.get("start_on") or payload.get("occurred_on"):
+        start_on = date.fromisoformat(clean_date(payload.get("start_on") or payload.get("occurred_on")))
+    else:
+        start, _ = month_bounds(str(payload.get("start_month")))
+        day = int(payload.get("day_of_month"))
+        if day < 1 or day > 31:
+            raise ValueError("Dia inválido.")
+        return occurrence_date(start.year, start.month, day), day
+    if frequency == "month":
+        day = int(payload.get("day_of_month") or start_on.day)
+        if day < 1 or day > 31:
+            raise ValueError("Dia inválido.")
+        return occurrence_date(start_on.year, start_on.month, day), day
+    if frequency == "week":
+        return start_on, start_on.weekday()
+    return start_on, start_on.day
+
+
+def _series_dates(frequency, start_on, day, total):
+    if frequency == "month":
+        dates = []
+        for offset in range(total):
+            year, mon = shift_month(start_on.year, start_on.month, offset)
+            dates.append(occurrence_date(year, mon, day))
+        return dates
+    step = 7 if frequency == "week" else 1
+    return [start_on + timedelta(days=step * offset) for offset in range(total)]
 
 
 def list_accounts(context, include_inactive=False):
@@ -698,12 +753,14 @@ def get_transaction(transaction_id):
 def _transaction_sql():
     return """
         SELECT t.*, a.name AS account_name, b.name AS transfer_account_name,
-               c.name AS category_name, s.name AS subcategory_name
+               c.name AS category_name, s.name AS subcategory_name,
+               sr.frequency AS series_frequency
         FROM transactions t
         JOIN accounts a ON a.id = t.account_id
         LEFT JOIN accounts b ON b.id = t.transfer_account_id
         LEFT JOIN categories c ON c.id = t.category_id
         LEFT JOIN subcategories s ON s.id = t.subcategory_id
+        LEFT JOIN series sr ON sr.id = t.series_id
     """
 
 
@@ -793,9 +850,6 @@ def _update_series_from_transaction(current, payload):
         if series is None:
             raise ValueError("Série não encontrada.")
         amount = clean_amount(payload.get("amount", series["amount"]))
-        day = int(payload.get("day_of_month") or date.fromisoformat(payload.get("occurred_on", current["occurred_on"])).day)
-        if day < 1 or day > 31:
-            raise ValueError("Dia inválido.")
         description = str(payload.get("description", series["description"]) or "").strip()
         account = _account_in_context(conn, payload.get("account_id", series["account_id"]), series["context"])
         category_id, subcategory_id = _validate_category(
@@ -803,14 +857,7 @@ def _update_series_from_transaction(current, payload):
             payload.get("category_id", series["category_id"]),
             payload.get("subcategory_id", series["subcategory_id"]),
         )
-        conn.execute(
-            """
-            UPDATE series
-            SET account_id = ?, category_id = ?, subcategory_id = ?, amount = ?, day_of_month = ?, description = ?
-            WHERE id = ?
-            """,
-            (account["id"], category_id, subcategory_id, amount, day, description, series["id"]),
-        )
+        frequency = series["frequency"] or "month"
         rows = conn.execute(
             """
             SELECT * FROM transactions
@@ -818,9 +865,39 @@ def _update_series_from_transaction(current, payload):
             """,
             (series["id"],),
         ).fetchall()
-        for row in rows:
-            when = date.fromisoformat(row["occurred_on"])
-            new_date = occurrence_date(when.year, when.month, day)
+        if frequency == "month":
+            day = int(payload.get("day_of_month") or date.fromisoformat(payload.get("occurred_on", current["occurred_on"])).day)
+            if day < 1 or day > 31:
+                raise ValueError("Dia inválido.")
+            conn.execute(
+                """
+                UPDATE series
+                SET account_id = ?, category_id = ?, subcategory_id = ?, amount = ?, day_of_month = ?, description = ?
+                WHERE id = ?
+                """,
+                (account["id"], category_id, subcategory_id, amount, day, description, series["id"]),
+            )
+            dated = []
+            for row in rows:
+                when = date.fromisoformat(row["occurred_on"])
+                dated.append((row, occurrence_date(when.year, when.month, day)))
+        else:
+            old = date.fromisoformat(current["occurred_on"])
+            new = date.fromisoformat(clean_date(payload.get("occurred_on", current["occurred_on"])))
+            delta = new - old
+            start_on = series["start_on"]
+            if start_on:
+                start_on = (date.fromisoformat(start_on) + delta).isoformat()
+            conn.execute(
+                """
+                UPDATE series
+                SET account_id = ?, category_id = ?, subcategory_id = ?, amount = ?, description = ?, start_on = ?
+                WHERE id = ?
+                """,
+                (account["id"], category_id, subcategory_id, amount, description, start_on, series["id"]),
+            )
+            dated = [(row, date.fromisoformat(row["occurred_on"]) + delta) for row in rows]
+        for row, new_date in dated:
             conn.execute(
                 """
                 UPDATE transactions
@@ -849,21 +926,15 @@ def create_series(payload):
     context = ensure_context(payload.get("context"))
     direction = payload.get("direction")
     if direction not in ("entrada", "saida"):
-        raise ValueError("A repetição mensal vale para entrada ou saída.")
+        raise ValueError("A repetição vale para entrada ou saída.")
+    frequency = payload.get("frequency") or "month"
+    if frequency not in REPEAT_FREQUENCIES:
+        raise ValueError("A repetição é todo mês, toda semana ou todo dia.")
     amount = clean_amount(payload.get("amount"))
-    day = int(payload.get("day_of_month"))
-    if day < 1 or day > 31:
-        raise ValueError("Dia inválido.")
-    start_month = str(payload.get("start_month"))
-    start, _ = month_bounds(start_month)
-    month_count = payload.get("month_count")
-    if month_count in ("", None):
-        month_count = None
-    else:
-        month_count = int(month_count)
-        if month_count < 1 or month_count > 480:
-            raise ValueError("A quantidade de meses precisa ficar entre 1 e 480.")
+    start_on, day = _series_anchor(payload, frequency)
+    repeat_count = _repeat_count(payload, frequency)
     description = str(payload.get("description") or "").strip()
+    first_status = payload.get("status") if payload.get("status") in ("previsto", "efetivado") else "previsto"
     with connect() as conn:
         account = _account_in_context(conn, payload.get("account_id"), context)
         category_id, subcategory_id = _validate_category(
@@ -873,20 +944,20 @@ def create_series(payload):
             """
             INSERT INTO series (
                 context, direction, account_id, category_id, subcategory_id, amount, day_of_month,
-                description, start_month, month_count, active, loan_id, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+                description, start_month, month_count, active, loan_id, created_at, frequency, start_on
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
             """,
             (
                 context, direction, account["id"], category_id, subcategory_id, amount, day,
-                description, start.strftime("%Y-%m"), month_count, payload.get("loan_id"), now(),
+                description, start_on.strftime("%Y-%m"), repeat_count, payload.get("loan_id"), now(),
+                frequency, start_on.isoformat(),
             ),
         )
         series_id = cur.lastrowid
-        total = month_count if month_count else 60
-        for offset in range(total):
-            year, mon = shift_month(start.year, start.month, offset)
-            when = occurrence_date(year, mon, day)
-            status = "previsto"
+        total = repeat_count if repeat_count else REPEAT_DEFAULT[frequency]
+        dates = _series_dates(frequency, start_on, day, total)
+        for offset, when in enumerate(dates):
+            status = first_status if offset == 0 else "previsto"
             conn.execute(
                 """
                 INSERT INTO transactions (
@@ -898,7 +969,7 @@ def create_series(payload):
                 (
                     context, direction, account["id"], category_id, subcategory_id, amount, when.isoformat(),
                     status, description, series_id, payload.get("loan_id"), offset + 1,
-                    1 if direction == "entrada" else 0, now(),
+                    1 if payload.get("counts_as_revenue", direction == "entrada") else 0, now(),
                 ),
             )
     return get_series(series_id)

@@ -299,10 +299,7 @@ function renderLancamentos() {
   });
   const filter = state.filter.pending ? "Pendências" : state.filter.day ? formatDate(state.filter.day) : state.filter.direction ? labelDirection(state.filter.direction) : "";
   return `<article class="panel">
-    <div class="panel-head">
-      <div class="row">${filter ? `<button type="button" class="pill" id="clear-filter">${filter} · limpar</button>` : ""}</div>
-      <button type="button" class="ghost" id="repeat">Repetir todo mês</button>
-    </div>
+    ${filter ? `<div class="panel-head"><div class="row"><button type="button" class="pill" id="clear-filter">${filter} · limpar</button></div></div>` : ""}
     ${items.map(transactionRow).join("") || empty("Nenhum lançamento", "Neste recorte não há movimento. Um lançamento novo entra na capa no dia escolhido.")}
   </article>`;
 }
@@ -461,8 +458,6 @@ function bindView() {
   const calNext = document.querySelector("#cal-next");
   if (calPrev) calPrev.onclick = () => shiftCalendar(-1);
   if (calNext) calNext.onclick = () => shiftCalendar(1);
-  const repeat = document.querySelector("#repeat");
-  if (repeat) repeat.onclick = () => openSeries();
   const clearFilter = document.querySelector("#clear-filter");
   if (clearFilter) clearFilter.onclick = () => { state.filter = {}; render(); };
   document.querySelectorAll("[data-tx]").forEach((button) => button.onclick = () => openTransaction(find(state.transactions, button.dataset.tx)));
@@ -565,6 +560,13 @@ function openTransaction(existing, preset) {
     <label id="sub">Subtipo<select name="subcategory_id"></select></label>
     <label>Situação<select name="status"><option value="previsto">Previsto</option><option value="efetivado" ${item.status === "efetivado" ? "selected" : ""}>Efetivado</option></select></label>
     <label id="revenue" class="check"><input type="checkbox" name="counts_as_revenue" ${item.counts_as_revenue !== 0 ? "checked" : ""}> Entra no faturamento</label>
+    <label id="repeat-kind">Repetir<select name="repeat" ${existing && existing.series_id ? "disabled" : ""}>
+      <option value="">Não repetir</option>
+      <option value="month" ${existing && existing.series_id && (existing.series_frequency || "month") === "month" ? "selected" : ""}>Todo mês</option>
+      <option value="week" ${existing && existing.series_frequency === "week" ? "selected" : ""}>Toda semana</option>
+      <option value="day" ${existing && existing.series_frequency === "day" ? "selected" : ""}>Todo dia</option>
+    </select></label>
+    <label id="repeat-count"><span id="repeat-label">Por quantos meses</span><input name="repeat_count" inputmode="numeric" placeholder="Vazio segue por 60 meses"></label>
     ${existing && existing.series_id ? `<label>Aplicar em<select name="scope"><option value="this">Só este lançamento</option><option value="all">Todas as ocorrências ainda não efetivadas</option></select></label>` : ""}
     <p class="error" id="error" hidden></p>
     <div class="row"><button type="button" id="cancel" class="ghost">Cancelar</button>${existing ? `<button type="button" id="erase" class="danger">Apagar</button>` : ""}${existing ? `<button type="button" id="drop" class="ghost">Cancelar lançamento</button>` : ""}<button class="primary" type="submit">Salvar</button></div>
@@ -576,6 +578,20 @@ function openTransaction(existing, preset) {
     document.querySelector("#kind").hidden = direction === "transferencia" || direction === "investimento";
     document.querySelector("#sub").hidden = document.querySelector("#kind").hidden;
     document.querySelector("#revenue").hidden = !(state.context === "pj" && direction === "entrada");
+    const canRepeat = direction === "entrada" || direction === "saida";
+    document.querySelector("#repeat-kind").hidden = !canRepeat;
+    const choice = form.repeat.value;
+    const units = {
+      month: ["Por quantos meses", "Vazio segue por 60 meses"],
+      week: ["Por quantas semanas", "Vazio segue por 52 semanas"],
+      day: ["Por quantos dias", "Vazio segue por 30 dias"],
+    };
+    const repeating = canRepeat && choice && !(existing && existing.series_id);
+    document.querySelector("#repeat-count").hidden = !repeating;
+    if (units[choice]) {
+      document.querySelector("#repeat-label").textContent = units[choice][0];
+      form.repeat_count.placeholder = units[choice][1];
+    }
     const categories = state.categories.filter((category) => category.active && category.direction === direction);
     form.category_id.innerHTML = categories.map((category) => `<option value="${category.id}" ${String(category.id) === String(item.category_id) ? "selected" : ""}>${escapeHtml(category.name)}</option>`).join("");
     const selected = categories.find((category) => String(category.id) === form.category_id.value);
@@ -583,6 +599,7 @@ function openTransaction(existing, preset) {
   };
   form.direction.onchange = sync;
   form.category_id.onchange = sync;
+  form.repeat.onchange = sync;
   sync();
   form.onsubmit = async (event) => {
     event.preventDefault();
@@ -595,7 +612,11 @@ function openTransaction(existing, preset) {
       payload.subcategory_id = form.subcategory_id.value ? Number(form.subcategory_id.value) : null;
       payload.account_id = Number(form.account_id.value);
       payload.transfer_account_id = form.transfer_account_id.value ? Number(form.transfer_account_id.value) : null;
-      if (existing) await api(`/api/transactions/${existing.id}`, { method: "PUT", body: JSON.stringify({ ...payload, scope: form.scope ? form.scope.value : "this" }) });
+      const repeat = form.repeat.value && (payload.direction === "entrada" || payload.direction === "saida") && !(existing && existing.series_id);
+      if (repeat) {
+        await api("/api/series", { method: "POST", body: JSON.stringify({ context: payload.context, direction: payload.direction, amount: payload.amount, frequency: form.repeat.value, start_on: form.occurred_on.value, count: form.repeat_count.value || null, account_id: payload.account_id, category_id: payload.category_id, subcategory_id: payload.subcategory_id, description: payload.description, counts_as_revenue: payload.counts_as_revenue, status: payload.status }) });
+        if (existing) await api(`/api/transactions/${existing.id}`, { method: "DELETE" });
+      } else if (existing) await api(`/api/transactions/${existing.id}`, { method: "PUT", body: JSON.stringify({ ...payload, scope: form.scope ? form.scope.value : "this" }) });
       else await api("/api/transactions", { method: "POST", body: JSON.stringify(payload) });
       closeModal(); await refresh(); render();
     } catch (error) { showError(error); }
@@ -746,36 +767,6 @@ function openUser() {
     event.preventDefault();
     try {
       await api("/api/users", { method: "POST", body: JSON.stringify(bodyFrom(form)) });
-      closeModal(); await refresh(); render();
-    } catch (error) { showError(error); }
-  };
-}
-
-function openSeries() {
-  modal(`<form id="form"><h2>Repetir todo mês</h2>
-    <label>Direção<select name="direction"><option value="saida">Saída</option><option value="entrada">Entrada</option></select></label>
-    <label>Valor<input name="amount" required></label>
-    <label>Dia do mês<input name="day_of_month" type="number" min="1" max="31" value="5"></label>
-    <label>A partir de<input name="start_month" value="${state.month}"></label>
-    <label>Quantidade de meses<input name="month_count" placeholder="Vazio repete por 60 meses"></label>
-    <label>Conta<select name="account_id">${options(state.accounts.filter((account) => account.active))}</select></label>
-    <label>Tipo<select name="category_id"></select></label>
-    <label>Descrição<input name="description"></label>
-    <p class="error" id="error" hidden></p>
-    <div class="row"><button type="button" id="cancel" class="ghost">Cancelar</button><button class="primary">Criar</button></div></form>`);
-  const form = document.querySelector("#form");
-  const syncSeriesCategories = () => {
-    const categories = state.categories.filter((category) => category.active && category.direction === form.direction.value);
-    const current = form.category_id.value;
-    form.category_id.innerHTML = categories.map((category) => `<option value="${category.id}">${escapeHtml(category.name)}</option>`).join("");
-    if ([...form.category_id.options].some((option) => option.value === current)) form.category_id.value = current;
-  };
-  form.direction.onchange = syncSeriesCategories;
-  syncSeriesCategories();
-  form.onsubmit = async (event) => {
-    event.preventDefault();
-    try {
-      await api("/api/series", { method: "POST", body: JSON.stringify({ context: state.context, direction: form.direction.value, amount: parseMoney(form.amount.value), day_of_month: Number(form.day_of_month.value), start_month: form.start_month.value, month_count: form.month_count.value || null, account_id: Number(form.account_id.value), category_id: Number(form.category_id.value), description: form.description.value }) });
       closeModal(); await refresh(); render();
     } catch (error) { showError(error); }
   };
@@ -932,6 +923,3 @@ async function api(path, options = {}) {
   return data;
 }
 
-document.addEventListener("keydown", (event) => {
-  if (event.altKey && event.key === "r") openSeries();
-});
