@@ -917,8 +917,11 @@ def cancel_transaction(transaction_id):
 
 
 def delete_transaction(transaction_id):
-    get_transaction(transaction_id)
+    current = get_transaction(transaction_id)
     with connect() as conn:
+        if current.get("loan_id"):
+            conn.execute("UPDATE transactions SET status = 'cancelado' WHERE id = ?", (transaction_id,))
+            return
         conn.execute("DELETE FROM transactions WHERE id = ?", (transaction_id,))
 
 
@@ -1184,22 +1187,36 @@ def get_loan(loan_id):
         item["transaction_id"] = link["id"] if link else None
     data = dict(row)
     data["rows"] = schedule
-    data["remaining"] = next((item["balance"] for item in reversed(schedule) if paid_map.get(item["number"], {}).get("status") == "efetivado"), data["principal"])
-    if schedule and paid_map.get(schedule[-1]["number"], {}).get("status") == "efetivado":
-        data["remaining"] = 0
+
+    def status_of(number):
+        link = paid_map.get(number)
+        return link["status"] if link else "previsto"
+
+    open_row = next((item for item in schedule if status_of(item["number"]) == "previsto"), None)
+    if open_row is None:
+        last_paid = next((item for item in reversed(schedule) if status_of(item["number"]) == "efetivado"), None)
+        data["remaining"] = 0 if last_paid and last_paid["number"] == schedule[-1]["number"] else (last_paid["balance"] if last_paid else data["principal"])
     else:
-        open_row = next((item for item in schedule if paid_map.get(item["number"], {}).get("status") != "efetivado"), None)
-        if open_row is None:
-            data["remaining"] = 0
-        else:
-            previous = next((item for item in schedule if item["number"] == open_row["number"] - 1), None)
-            data["remaining"] = data["principal"] if previous is None else previous["balance"] + 0
-            if previous:
-                data["remaining"] = previous["balance"]
-            else:
-                data["remaining"] = data["principal"]
+        previous = next((item for item in schedule if item["number"] == open_row["number"] - 1), None)
+        data["remaining"] = previous["balance"] if previous else data["principal"]
     data["total_interest"] = sum(item["interest"] for item in schedule)
     return data
+
+
+def settle_elapsed_installments(loan_id, today=None):
+    today = (today or date.today()).isoformat()
+    get_loan(loan_id)
+    with connect() as conn:
+        conn.execute(
+            "UPDATE transactions SET status = 'efetivado' WHERE loan_id = ? AND status = 'previsto' AND occurred_on < ?",
+            (loan_id, today),
+        )
+        count = conn.execute(
+            "SELECT COUNT(*) AS n FROM transactions WHERE loan_id = ? AND status = 'efetivado'",
+            (loan_id,),
+        ).fetchone()["n"]
+        conn.execute("UPDATE loans SET already_paid = ? WHERE id = ?", (count, loan_id))
+    return get_loan(loan_id)
 
 
 def list_loans(context):
@@ -1207,6 +1224,28 @@ def list_loans(context):
     with connect() as conn:
         ids = [row["id"] for row in conn.execute("SELECT id FROM loans WHERE context = ? ORDER BY name", (context,))]
     return [get_loan(loan_id) for loan_id in ids]
+
+
+def update_goal(goal_id, name, target_amount, target_date):
+    current = get_goal(goal_id)
+    name = clean_name(name if name is not None else current["name"], "Nome da meta")
+    target = clean_amount(target_amount if target_amount is not None else current["target_amount"])
+    when = clean_date(target_date or current["target_date"])
+    with connect() as conn:
+        conn.execute(
+            "UPDATE goals SET name = ?, target_amount = ?, target_date = ? WHERE id = ?",
+            (name, target, when, goal_id),
+        )
+    return get_goal(goal_id)
+
+
+def delete_goal(goal_id):
+    get_goal(goal_id)
+    with connect() as conn:
+        conn.execute("DELETE FROM goal_months WHERE goal_id = ?", (goal_id,))
+        deleted = conn.execute("DELETE FROM goals WHERE id = ?", (goal_id,)).rowcount
+    if not deleted:
+        raise ValueError("Meta não encontrada.")
 
 
 def create_goal(context, name, target_amount, target_date):

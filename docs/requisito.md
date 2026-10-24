@@ -76,7 +76,7 @@ RF-CAPA-06. Abaixo dos cards, o mês aparece dia a dia, do dia 1 ao último dia 
 
 RF-CAPA-07. Cada dia mostra as entradas, as saídas, os investimentos e o saldo acumulado até o fim daquele dia.
 
-RF-CAPA-08. O saldo acumulado de um dia é a soma das entradas até aquele dia, menos as saídas até aquele dia, menos os investimentos até aquele dia. O dia 1 começa em zero. Este saldo é o resultado do mês, não a soma do dinheiro que já estava nas contas antes do mês.
+RF-CAPA-08. O número grande da capa é a posição acumulada até o fim do mês: o que veio antes, mais as entradas, menos as saídas, menos os investimentos. O que veio antes é todo movimento não cancelado dos meses anteriores, exceto transferência. A frase abaixo do número diz só o que este mês gerou. Se veio valor do mês anterior, o rótulo é Saldo acumulado ou Déficit acumulado.
 
 RF-CAPA-09. Dia já passado usa o que foi efetivado. Dia de hoje e dias seguintes somam também o que está previsto e ainda não efetivado.
 
@@ -133,7 +133,7 @@ RF-LAN-10. "Todas" altera a regra e as ocorrências que ainda não foram efetiva
 
 RF-LAN-11. Encerrar a série pede a partir de qual mês. Ocorrências já efetivadas permanecem.
 
-RF-LAN-12. Neste requisito a repetição é mensal. Semanal, quinzenal e anual ficam fora.
+RF-LAN-12. A repetição pode ser todo mês, toda semana ou todo dia. A data do lançamento define o dia, o dia da semana ou o ponto de partida. Quantidade em branco usa 60 meses, 52 semanas ou 30 dias. O teto é 480 ocorrências. Quinzenal e anual ficam fora.
 
 ## 8. Tipagem e situação
 
@@ -288,7 +288,7 @@ Estes são os conceitos, não o desenho do banco.
 - **Conta.** Nome livre, de um contexto, com saldo. Pode ser banco, carteira ou qualquer outro lugar.
 - **Tipo e subtipo.** Configurados pela pessoa, por contexto e direção.
 - **Lançamento.** Movimento de uma data, com situação e conta.
-- **Série.** Regra mensal que gera lançamentos.
+- **Série.** Regra mensal, semanal ou diária que gera lançamentos.
 - **Empréstimo.** Contrato que gera uma série de parcelas e guarda a evolução.
 - **Meta.** Alvo com data, desafio mensal e histórico.
 - **Simulação.** Hipótese temporária sobre o panorama.
@@ -301,7 +301,7 @@ Estes são os conceitos, não o desenho do banco.
 - Cotação de bolsa, fundo ou cripto.
 - Emissão de DAS, nota fiscal ou DASN.
 - Cálculo de imposto de microempresa e de empresa de pequeno porte.
-- Repetição que não seja mensal.
+- Repetição quinzenal ou anual.
 - Cobrança de assinatura do próprio Finances.
 - Publicação nas lojas. O requisito só impede decisões que bloqueiem essa publicação.
 
@@ -339,8 +339,8 @@ Confirmadas em 18 de outubro de 2026:
 2. Lançamento manual. Sem Open Finance.
 3. Conta é um nome livre. Não precisa ser instituição financeira.
 4. Cartão não é tipo de lançamento e não tem fatura automática. Se for controlado, é uma conta com o nome que você der.
-5. O saldo da capa é entradas − saídas − investimentos do mês. Ao lado entram entradas, saídas, pendências e investimentos.
+5. O número grande da capa carrega o saldo ou o déficit dos meses anteriores. A frase abaixo é só o que este mês gerou: entradas − saídas − investimentos. Ao lado entram entradas, saídas, pendências e investimentos. O saldo de cada conta bancária conta só o efetivado.
 6. Na meta, você informa quanto guardou. O sistema não calcula isso sozinho.
-7. Repetição só mensal.
+7. Repetição todo mês, toda semana ou todo dia.
 8. Empréstimo em Tabela Price por padrão, um contrato por conta.
 9. Empresa só no contexto de pessoa jurídica, como acompanhamento, sem emitir guia.

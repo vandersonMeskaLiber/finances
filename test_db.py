@@ -133,6 +133,41 @@ class RequirementTests(unittest.TestCase):
         self.assertGreater(rows[0]["interest"], rows[-1]["interest"])
         self.assertEqual(len(rows), 36)
 
+    def test_goal_edit_keeps_closed_month_and_can_be_deleted(self):
+        goal = db.create_goal("pf", "Reserva", 300000, "2026-12-31")
+        db.save_goal_month(goal["id"], "2026-10", 10000, today=date(2026, 10, 18))
+        edited = db.update_goal(goal["id"], "Reserva nova", 600000, "2027-01-31")
+        self.assertEqual(edited["name"], "Reserva nova")
+        self.assertEqual(edited["target_amount"], 600000)
+        october = next(item for item in edited["history"] if item["month"] == "2026-10")
+        self.assertEqual(october["saved"], 10000)
+        self.assertTrue(any(item["month"] == "2027-01" for item in edited["history"]))
+        db.delete_goal(goal["id"])
+        self.assertEqual(db.list_goals("pf"), [])
+
+    def test_deleting_loan_installment_does_not_reopen_the_debt(self):
+        loan = db.create_loan({
+            "context": "pf", "name": "Teste", "account_id": self.account["id"],
+            "category_id": self.expense["id"], "principal": 100000, "monthly_rate": "1,00",
+            "term_months": 3, "first_due": "2026-01-10", "system": "price", "already_paid": 1,
+        })
+        paid = next(row for row in loan["rows"] if row["status"] == "efetivado")
+        db.delete_transaction(paid["transaction_id"])
+        again = db.get_loan(loan["id"])
+        cancelled = next(row for row in again["rows"] if row["number"] == paid["number"])
+        self.assertEqual(cancelled["status"], "cancelado")
+        self.assertNotEqual(again["remaining"], loan["principal"])
+
+    def test_settle_marks_only_elapsed_installments(self):
+        loan = db.create_loan({
+            "context": "pf", "name": "Atraso", "account_id": self.account["id"],
+            "category_id": self.expense["id"], "principal": 300000, "monthly_rate": "0",
+            "term_months": 3, "first_due": "2026-09-10", "system": "price", "already_paid": 0,
+        })
+        settled = db.settle_elapsed_installments(loan["id"], today=date(2026, 10, 24))
+        statuses = [row["status"] for row in settled["rows"]]
+        self.assertEqual(statuses, ["efetivado", "efetivado", "previsto"])
+
     def test_goal_shortfall_raises_next_challenge(self):
         goal = db.create_goal("pf", "Reserva", 300000, "2026-12-31")
         current = goal["current"]["month"]

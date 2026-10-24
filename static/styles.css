@@ -148,6 +148,8 @@ h2 { font-size: 22px; }
 .item.sub { padding: 8px 0; }
 .item.sub .who strong { font-weight: 500; font-size: 15px; }
 .sub-empty { margin: 0 0 12px; }
+.item.launch .item-end, .item-end { display: flex; align-items: center; gap: 10px; }
+.item.launch .item-actions, .item-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .who strong { font-size: 16px; }
 .money { font-variant-numeric: tabular-nums; font-family: var(--serif); font-size: 20px; white-space: nowrap; }
@@ -246,5 +248,12 @@ input[type="checkbox"] { width: 18px; height: 18px; padding: 0; accent-color: va
   .dayline .when { font-variant-numeric: tabular-nums; }
   .dayline strong { font-family: var(--serif); font-size: 16px; font-variant-numeric: tabular-nums; }
   .item { align-items: flex-start; flex-wrap: wrap; }
+  .item.launch {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 8px 12px;
+  }
+  .item.launch .item-end { grid-column: 2; flex-direction: column; align-items: flex-end; gap: 6px; }
+  .item.launch .item-actions { grid-column: 1 / -1; }
+  .item.launch .who .tag { line-height: 1.35; }
   .money { margin-left: auto; }
+  .item.launch .money { margin-left: 0; }
 }

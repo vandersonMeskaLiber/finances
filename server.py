@@ -157,8 +157,15 @@ class Handler(BaseHTTPRequestHandler):
             elif method == "POST" and parsed.path == "/api/loans":
                 payload["context"] = context
                 self._send(201, db.create_loan(payload))
+            elif method == "POST" and len(parts) == 4 and parts[1] == "loans" and parts[3] == "settle":
+                self._send(200, db.settle_elapsed_installments(int(parts[2])))
             elif method == "POST" and parsed.path == "/api/goals":
                 self._send(201, db.create_goal(context, payload.get("name"), payload.get("target_amount"), payload.get("target_date")))
+            elif method == "PUT" and len(parts) == 3 and parts[1] == "goals":
+                self._send(200, db.update_goal(int(parts[2]), payload.get("name"), payload.get("target_amount"), payload.get("target_date")))
+            elif method == "DELETE" and len(parts) == 3 and parts[1] == "goals":
+                db.delete_goal(int(parts[2]))
+                self._send(200, {"ok": True})
             elif method == "PUT" and len(parts) == 5 and parts[1] == "goals":
                 self._send(200, db.save_goal_month(int(parts[2]), parts[4], payload.get("saved")))
             elif method == "POST" and parsed.path == "/api/simulation":
