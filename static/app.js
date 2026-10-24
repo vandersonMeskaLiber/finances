@@ -289,7 +289,7 @@ function renderContas() {
     <div class="item">
       <div class="who"><strong>${escapeHtml(account.name)}</strong><span class="tag">${account.active ? "Ativa" : "Desativada"}</span></div>
       <div class="item-end"><span class="tag">Efetivado</span><strong class="money">${money(account.balance)}</strong></div>
-      <button type="button" class="ghost" data-account="${account.id}">Editar</button>
+      <div class="item-actions"><button type="button" class="ghost" data-account="${account.id}">Editar</button><button type="button" class="danger" data-del-account="${account.id}">Apagar</button></div>
     </div>`).join("");
   return `<article class="panel">${rows || empty("Nenhuma conta", "Crie a primeira com um nome livre. O saldo dela só conta o que já foi efetivado.")}</article>`;
 }
@@ -346,8 +346,9 @@ function renderTipos() {
           </div>
           <div class="row">
             <button type="button" class="ghost" data-sub="${category.id}">Novo subtipo</button>
+            <button type="button" class="ghost" data-edit-cat="${category.id}">Renomear</button>
             <button type="button" class="ghost" data-off-cat="${category.id}">${category.active ? "Desativar" : "Ativar"}</button>
-            ${category.deletable ? `<button type="button" class="danger" data-del-cat="${category.id}">Apagar</button>` : ""}
+            <button type="button" class="danger" data-del-cat="${category.id}">Apagar</button>
           </div>
         </div>
         <div class="subs">${category.subcategories.map((sub) => `
@@ -356,7 +357,7 @@ function renderTipos() {
             <div class="row">
               <button type="button" class="ghost" data-edit-sub="${sub.id}">Renomear</button>
               <button type="button" class="ghost" data-off-sub="${sub.id}">${sub.active ? "Desativar" : "Ativar"}</button>
-              ${sub.deletable ? `<button type="button" class="danger" data-del-sub="${sub.id}">Apagar</button>` : ""}
+              <button type="button" class="danger" data-del-sub="${sub.id}">Apagar</button>
             </div>
           </div>`).join("") || `<p class="tag sub-empty">Nenhum subtipo. O lançamento pode ficar só no tipo.</p>`}
         </div>
@@ -370,7 +371,11 @@ function renderEmprestimos() {
   const rows = state.loans.map((loan) => `<div class="item">
     <div class="who"><strong>${escapeHtml(loan.name)}</strong><span class="tag">${loan.term_months} meses · parcela ${money(loan.installment)}</span></div>
     <span class="tag">Restam ${money(loan.remaining)}</span>
-    <button type="button" class="ghost" data-loan="${loan.id}">Ver evolução</button>
+    <div class="item-actions">
+      <button type="button" class="ghost" data-loan="${loan.id}">Ver evolução</button>
+      <button type="button" class="ghost" data-loan-edit="${loan.id}">Editar</button>
+      <button type="button" class="danger" data-del-loan="${loan.id}">Apagar</button>
+    </div>
   </div>`).join("");
   return `<article class="panel">
     <div class="panel-head"><h2>Saldo devedor</h2><strong class="money">${money(total)}</strong></div>
@@ -455,7 +460,11 @@ function renderUsuarios() {
     ${state.users.map((user) => `<div class="item">
       <div class="who"><strong>${escapeHtml(user.name)}</strong><span class="tag">${user.role === "admin" ? "Administrador" : "Usuário"} · ${escapeHtml(user.email)}</span></div>
       <span class="pill ${user.active ? "ok" : ""}">${user.active ? "Ativo" : "Desativado"}</span>
-      <button type="button" class="ghost" data-user="${user.id}" data-active="${user.active ? "1" : "0"}">${user.active ? "Desativar" : "Ativar"}</button>
+      <div class="item-actions">
+        <button type="button" class="ghost" data-user-edit="${user.id}">Editar</button>
+        <button type="button" class="ghost" data-user="${user.id}" data-active="${user.active ? "1" : "0"}">${user.active ? "Desativar" : "Ativar"}</button>
+        <button type="button" class="danger" data-del-user="${user.id}">Apagar</button>
+      </div>
     </div>`).join("")}
   </article>`;
 }
@@ -490,6 +499,8 @@ function bindView() {
   document.querySelectorAll("[data-tx]").forEach((button) => button.onclick = () => openTransaction(find(state.transactions, button.dataset.tx)));
   document.querySelectorAll("[data-del-tx]").forEach((button) => button.onclick = () => removeTransaction(find(state.transactions, button.dataset.delTx)));
   document.querySelectorAll("[data-account]").forEach((button) => button.onclick = () => openAccount(find(state.accounts, button.dataset.account)));
+  document.querySelectorAll("[data-del-account]").forEach((button) => button.onclick = () => removeAccount(find(state.accounts, button.dataset.delAccount)));
+  document.querySelectorAll("[data-edit-cat]").forEach((button) => button.onclick = () => openCategoryEdit(find(state.categories, button.dataset.editCat)));
   document.querySelectorAll("[data-sub]").forEach((button) => button.onclick = () => openSubcategory(button.dataset.sub));
   document.querySelectorAll("[data-edit-sub]").forEach((button) => button.onclick = () => openSubcategory(null, findSub(button.dataset.editSub)));
   document.querySelectorAll("[data-off-sub]").forEach((button) => button.onclick = async () => {
@@ -499,6 +510,7 @@ function bindView() {
   });
   document.querySelectorAll("[data-del-cat]").forEach((button) => button.onclick = async () => {
     const category = find(state.categories, button.dataset.delCat);
+    if (!category.deletable) { notice("Este tipo já está em um lançamento. Desative para não usar em lançamentos novos."); return; }
     const accepted = await ask("Apagar tipo", `${category.name} sai junto com os subtipos. Não dá para desfazer.`, "Apagar");
     if (!accepted) return;
     try {
@@ -508,6 +520,7 @@ function bindView() {
   });
   document.querySelectorAll("[data-del-sub]").forEach((button) => button.onclick = async () => {
     const sub = findSub(button.dataset.delSub);
+    if (!sub.deletable) { notice("Este subtipo já está em um lançamento. Desative para não usar em lançamentos novos."); return; }
     const accepted = await ask("Apagar subtipo", `${sub.name} sai da lista. Não dá para desfazer.`, "Apagar");
     if (!accepted) return;
     try {
@@ -521,6 +534,10 @@ function bindView() {
     await refresh(); render();
   });
   document.querySelectorAll("[data-loan]").forEach((button) => button.onclick = () => openLoan(find(state.loans, button.dataset.loan)));
+  document.querySelectorAll("[data-loan-edit]").forEach((button) => button.onclick = () => openLoanForm(find(state.loans, button.dataset.loanEdit)));
+  document.querySelectorAll("[data-del-loan]").forEach((button) => button.onclick = () => removeLoan(find(state.loans, button.dataset.delLoan)));
+  document.querySelectorAll("[data-user-edit]").forEach((button) => button.onclick = () => openUserEdit(find(state.users, button.dataset.userEdit)));
+  document.querySelectorAll("[data-del-user]").forEach((button) => button.onclick = () => removeUser(find(state.users, button.dataset.delUser)));
   document.querySelectorAll("[data-goal]").forEach((button) => button.onclick = () => openGoal(find(state.goals, button.dataset.goal)));
   document.querySelectorAll("[data-goal-edit]").forEach((button) => button.onclick = () => openGoalEdit(find(state.goals, button.dataset.goalEdit)));
   document.querySelectorAll("[data-del-goal]").forEach((button) => button.onclick = () => removeGoal(find(state.goals, button.dataset.delGoal)));
@@ -694,6 +711,31 @@ function openAccount(existing) {
   };
 }
 
+async function removeAccount(account) {
+  if (!account) return;
+  if (!account.deletable) { notice("Esta conta já está em um lançamento. Desative para não usar em lançamentos novos."); return; }
+  const accepted = await ask("Apagar conta", `${account.name} sai da lista. Não dá para desfazer.`, "Apagar");
+  if (!accepted) return;
+  try {
+    await api(`/api/accounts/${account.id}`, { method: "DELETE" });
+    closeModal();
+    await refresh();
+    render();
+  } catch (error) { await notice(error.message); }
+}
+
+function openCategoryEdit(category) {
+  modal(`<form id="form"><h2>Renomear tipo</h2><label>Nome<input name="name" required value="${escapeHtml(category.name)}"></label><p class="error" id="error" hidden></p><div class="row"><button type="button" id="cancel" class="ghost">Cancelar</button><button class="primary">Salvar</button></div></form>`);
+  const form = document.querySelector("#form");
+  form.onsubmit = async (event) => {
+    event.preventDefault();
+    try {
+      await api(`/api/categories/${category.id}`, { method: "PUT", body: JSON.stringify({ name: form.name.value }) });
+      closeModal(); await refresh(); render();
+    } catch (error) { showError(error); }
+  };
+}
+
 function openCategory() {
   modal(`<form id="form"><h2>Novo tipo</h2>
     <label>Nome<input name="name" required></label>
@@ -730,24 +772,35 @@ function findSub(id) {
   }
 }
 
-function openLoanForm() {
+function openLoanForm(existing) {
   const saidas = state.categories.filter((category) => category.direction === "saida" && category.active);
-  if (!state.accounts.length || !saidas.length) { notice("Crie uma conta e um tipo de saída antes do empréstimo."); return; }
-  modal(`<form id="form"><h2>Novo empréstimo</h2>
-    <label>Nome<input name="name" value="Empréstimo"></label>
-    <label>Valor tomado<span class="reais"><span>R$</span><input name="principal" inputmode="numeric" autocomplete="off" placeholder="0,00" required></span></label>
-    <label>Taxa mensal (%)<input name="monthly_rate" required placeholder="1,99"></label>
-    <label>Prazo em meses<input name="term_months" placeholder="Deixe vazio se informar a parcela"></label>
-    <label>Ou valor da parcela<span class="reais"><span>R$</span><input name="installment" inputmode="numeric" autocomplete="off" placeholder="0,00"></span></label>
-    <label>Sistema<select name="system"><option value="price">Tabela Price</option><option value="sac">SAC</option></select></label>
-    <label>Primeira parcela<input type="date" name="first_due" required value="${new Date().toISOString().slice(0, 10)}"></label>
-    <label>Parcelas já pagas<input name="already_paid" value="0"></label>
-    <p class="tag" id="due-hint"></p>
-    <label>Conta da parcela<select name="account_id">${options(state.accounts.filter((account) => account.active))}</select></label>
-    <label>Tipo<select name="category_id">${saidas.map((category) => `<option value="${category.id}">${escapeHtml(category.name)}</option>`).join("")}</select></label>
+  const accounts = state.accounts.filter((account) => account.active);
+  if (existing && !accounts.some((account) => account.id === existing.account_id)) {
+    const current = state.accounts.find((account) => account.id === existing.account_id);
+    if (current) accounts.push(current);
+  }
+  if (existing && !saidas.some((category) => category.id === existing.category_id)) {
+    const current = state.categories.find((category) => category.id === existing.category_id);
+    if (current) saidas.push(current);
+  }
+  if (!accounts.length || !saidas.length) { notice("Crie uma conta e um tipo de saída antes do empréstimo."); return; }
+  const locked = existing && existing.rows.some((row) => row.status !== "previsto");
+  const lock = locked ? "disabled" : "";
+  modal(`<form id="form"><h2>${existing ? "Editar empréstimo" : "Novo empréstimo"}</h2>
+    <label>Nome<input name="name" value="${existing ? escapeHtml(existing.name) : "Empréstimo"}"></label>
+    <label>Valor tomado<span class="reais"><span>R$</span><input name="principal" inputmode="numeric" autocomplete="off" placeholder="0,00" required ${lock} value="${existing ? formatReaisInput(existing.principal) : ""}"></span></label>
+    <label>Taxa mensal (%)<input name="monthly_rate" required placeholder="1,99" ${lock} value="${existing ? ratePercent(existing.monthly_rate) : ""}"></label>
+    <label>Prazo em meses<input name="term_months" placeholder="Deixe vazio se informar a parcela" ${lock} value="${existing ? existing.term_months : ""}"></label>
+    <label>Ou valor da parcela<span class="reais"><span>R$</span><input name="installment" inputmode="numeric" autocomplete="off" placeholder="0,00" ${lock}></span></label>
+    <label>Sistema<select name="system" ${lock}><option value="price" ${existing && existing.system === "price" ? "selected" : ""}>Tabela Price</option><option value="sac" ${existing && existing.system === "sac" ? "selected" : ""}>SAC</option></select></label>
+    <label>Primeira parcela<input type="date" name="first_due" required ${lock} value="${existing ? existing.first_due : new Date().toISOString().slice(0, 10)}"></label>
+    <label>Parcelas já pagas<input name="already_paid" ${lock} value="${existing ? existing.already_paid : 0}"></label>
+    <p class="tag" id="due-hint">${locked ? "Há parcela paga ou cancelada. Dá para mudar o nome, a conta e o tipo. Para mudar valor, taxa ou prazo, apague o contrato." : ""}</p>
+    <label>Conta da parcela<select name="account_id">${options(accounts, existing && existing.account_id)}</select></label>
+    <label>Tipo<select name="category_id">${saidas.map((category) => `<option value="${category.id}" ${existing && category.id === existing.category_id ? "selected" : ""}>${escapeHtml(category.name)}</option>`).join("")}</select></label>
     <p class="error" id="error" hidden></p>
     <div id="preview"></div>
-    <div class="row"><button type="button" id="cancel" class="ghost">Cancelar</button><button type="button" id="calc" class="ghost">Calcular</button><button class="primary">Lançar contrato</button></div></form>`);
+    <div class="row"><button type="button" id="cancel" class="ghost">Cancelar</button>${existing ? `<button type="button" id="erase" class="danger">Apagar</button>` : ""}<button type="button" id="calc" class="ghost">Calcular</button><button class="primary">${existing ? "Salvar" : "Lançar contrato"}</button></div></form>`);
   const form = document.querySelector("#form");
   bindReais(form.principal);
   bindReais(form.installment);
@@ -757,7 +810,7 @@ function openLoanForm() {
     document.querySelector("#due-hint").textContent = due ? `Desde essa data já ${word}. Informe quantas você já pagou.` : "";
   };
   form.first_due.onchange = showDue;
-  showDue();
+  if (!locked) showDue();
   const payload = () => ({
     principal: parseMoney(form.principal.value), monthly_rate: form.monthly_rate.value, term_months: form.term_months.value || null,
     installment: form.installment.value ? parseMoney(form.installment.value) : null, system: form.system.value, first_due: form.first_due.value,
@@ -768,13 +821,29 @@ function openLoanForm() {
       document.querySelector("#preview").innerHTML = `<p>${result.term_months} parcelas. Primeira ${money(result.installment)}. Juros ${money(result.total_interest)}. Saldo final ${money(result.leftover)}.</p>`;
     } catch (error) { showError(error); }
   };
+  const erase = document.querySelector("#erase");
+  if (erase) erase.onclick = () => removeLoan(existing);
   form.onsubmit = async (event) => {
     event.preventDefault();
+    const body = { ...payload(), context: state.context, name: form.name.value, account_id: Number(form.account_id.value), category_id: Number(form.category_id.value), already_paid: Number(form.already_paid.value || 0) };
     try {
-      await api("/api/loans", { method: "POST", body: JSON.stringify({ ...payload(), context: state.context, name: form.name.value, account_id: Number(form.account_id.value), category_id: Number(form.category_id.value), already_paid: Number(form.already_paid.value || 0) }) });
+      if (existing) await api(`/api/loans/${existing.id}`, { method: "PUT", body: JSON.stringify(body) });
+      else await api("/api/loans", { method: "POST", body: JSON.stringify(body) });
       closeModal(); await refresh(); render();
     } catch (error) { showError(error); }
   };
+}
+
+async function removeLoan(loan) {
+  if (!loan) return;
+  const accepted = await ask("Apagar empréstimo", `${loan.name} sai da lista e as parcelas saem dos lançamentos. Não dá para desfazer.`, "Apagar");
+  if (!accepted) return;
+  try {
+    await api(`/api/loans/${loan.id}`, { method: "DELETE" });
+    closeModal();
+    await refresh();
+    render();
+  } catch (error) { await notice(error.message); }
 }
 
 function openLoan(loan) {
@@ -843,6 +912,32 @@ function openGoal(goal) {
       closeModal(); await refresh(); render();
     } catch (error) { showError(error); }
   };
+}
+
+function openUserEdit(user) {
+  modal(`<form id="form"><h2>Editar usuário</h2><label>Nome<input name="name" required value="${escapeHtml(user.name)}"></label><label>E-mail<input name="email" type="email" required value="${escapeHtml(user.email)}"></label><label>Papel<select name="role"><option value="user" ${user.role === "user" ? "selected" : ""}>Usuário</option><option value="admin" ${user.role === "admin" ? "selected" : ""}>Administrador</option></select></label><label>Nova senha<input name="password" type="password" placeholder="Deixe em branco para manter"></label><p class="error" id="error" hidden></p><div class="row"><button type="button" id="cancel" class="ghost">Cancelar</button><button class="primary">Salvar</button></div></form>`);
+  const form = document.querySelector("#form");
+  form.onsubmit = async (event) => {
+    event.preventDefault();
+    const body = { name: form.name.value, email: form.email.value, role: form.role.value };
+    if (form.password.value) body.password = form.password.value;
+    try {
+      await api(`/api/users/${user.id}`, { method: "PUT", body: JSON.stringify(body) });
+      closeModal(); await refresh(); render();
+    } catch (error) { showError(error); }
+  };
+}
+
+async function removeUser(user) {
+  if (!user) return;
+  const accepted = await ask("Apagar usuário", `${user.name} perde o acesso. Não dá para desfazer.`, "Apagar");
+  if (!accepted) return;
+  try {
+    await api(`/api/users/${user.id}`, { method: "DELETE" });
+    closeModal();
+    await refresh();
+    render();
+  } catch (error) { await notice(error.message); }
 }
 
 function openUser() {
@@ -1004,6 +1099,10 @@ function openDasPayment(month) {
     const launch = form.launch.checked ? { account_id: Number(form.account_id.value), category_id: Number(form.category_id.value) } : null;
     try { await markDas(month, true, launch); } catch (error) { showError(error); }
   };
+}
+function ratePercent(stored) {
+  const text = (Number(stored) * 100).toFixed(4).replace(/\.?0+$/, "");
+  return text.replace(".", ",");
 }
 function formatReaisInput(raw) {
   const digits = String(raw ?? "").replace(/\D/g, "").replace(/^0+(?=\d)/, "");

@@ -308,6 +308,52 @@ def set_user_active(user_id, active):
             conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
 
 
+def update_user(user_id, name, email, role, password=None):
+    name = str(name or "").strip()
+    email = str(email or "").strip().lower()
+    if not name or len(name) > 80:
+        raise ValueError("Informe o nome.")
+    if "@" not in email or len(email) > 120:
+        raise ValueError("Informe um e-mail válido.")
+    if role not in ("admin", "user"):
+        raise ValueError("Papel inválido.")
+    with connect() as conn:
+        row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        if row is None:
+            raise ValueError("Usuário não encontrado.")
+        if row["role"] == "admin" and role != "admin":
+            others = conn.execute("SELECT COUNT(*) AS n FROM users WHERE role = 'admin' AND active = 1 AND id != ?", (user_id,)).fetchone()["n"]
+            if others == 0:
+                raise ValueError("O espaço precisa de um administrador ativo.")
+        fields = [name, email, role, user_id]
+        sql = "UPDATE users SET name = ?, email = ?, role = ? WHERE id = ?"
+        if password:
+            salt, digest = hash_password(password)
+            sql = "UPDATE users SET name = ?, email = ?, role = ?, password_hash = ?, salt = ? WHERE id = ?"
+            fields = [name, email, role, digest, salt, user_id]
+        try:
+            conn.execute(sql, fields)
+        except sqlite3.IntegrityError:
+            raise ValueError("Já existe um login com esse e-mail.") from None
+        updated = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    return public_user(updated)
+
+
+def delete_user(user_id, actor_id):
+    if int(user_id) == int(actor_id):
+        raise ValueError("Você não pode apagar o próprio acesso.")
+    with connect() as conn:
+        row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        if row is None:
+            raise ValueError("Usuário não encontrado.")
+        if row["role"] == "admin":
+            others = conn.execute("SELECT COUNT(*) AS n FROM users WHERE role = 'admin' AND id != ?", (user_id,)).fetchone()["n"]
+            if others == 0:
+                raise ValueError("O espaço precisa de um administrador.")
+        conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+        conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+
+
 def reset_password(user_id, password):
     salt, digest = hash_password(password)
     with connect() as conn:
@@ -460,10 +506,22 @@ def list_accounts(context, include_inactive=False):
             (context,),
         ).fetchall()
         accounts = []
+        used = {
+            row["id"]
+            for row in conn.execute(
+                """
+                SELECT account_id AS id FROM transactions
+                UNION SELECT transfer_account_id FROM transactions WHERE transfer_account_id IS NOT NULL
+                UNION SELECT account_id FROM series
+                UNION SELECT account_id FROM loans
+                """
+            )
+        }
         for row in rows:
             balance = account_balance(conn, row["id"])
             item = dict(row)
             item["balance"] = balance
+            item["deletable"] = item["id"] not in used
             accounts.append(item)
     return accounts
 
@@ -510,6 +568,25 @@ def update_account(account_id, name=None, active=None):
         conn.execute("UPDATE accounts SET name = ?, active = ? WHERE id = ?", (next_name, next_active, account_id))
         context = row["context"]
     return next(item for item in list_accounts(context, True) if item["id"] == account_id)
+
+
+def delete_account(account_id):
+    with connect() as conn:
+        row = conn.execute("SELECT * FROM accounts WHERE id = ?", (account_id,)).fetchone()
+        if row is None:
+            raise ValueError("Conta não encontrada.")
+        used = conn.execute(
+            """
+            SELECT 1 FROM transactions WHERE account_id = ? OR transfer_account_id = ?
+            UNION SELECT 1 FROM series WHERE account_id = ?
+            UNION SELECT 1 FROM loans WHERE account_id = ?
+            LIMIT 1
+            """,
+            (account_id, account_id, account_id, account_id),
+        ).fetchone()
+        if used:
+            raise ValueError("Esta conta já está em um lançamento. Desative para não usar em lançamentos novos.")
+        conn.execute("DELETE FROM accounts WHERE id = ?", (account_id,))
 
 
 def list_categories(context):
@@ -1217,6 +1294,138 @@ def settle_elapsed_installments(loan_id, today=None):
         ).fetchone()["n"]
         conn.execute("UPDATE loans SET already_paid = ? WHERE id = ?", (count, loan_id))
     return get_loan(loan_id)
+
+
+def _loan_rate(payload):
+    return Decimal(str(payload.get("monthly_rate")).replace(",", ".")) / Decimal(100)
+
+
+def _loan_terms_match(current, payload, preview):
+    return (
+        clean_amount(payload.get("principal")) == current["principal"]
+        and _loan_rate(payload) == Decimal(str(current["monthly_rate"]))
+        and (payload.get("system") or "price") == current["system"]
+        and preview["term_months"] == current["term_months"]
+        and clean_date(payload.get("first_due")) == current["first_due"]
+        and int(payload.get("already_paid") or 0) == int(current["already_paid"])
+    )
+
+
+def _clear_loan_children(conn, loan_id, series_id):
+    if series_id is None:
+        conn.execute("DELETE FROM transactions WHERE loan_id = ?", (loan_id,))
+    else:
+        conn.execute("DELETE FROM transactions WHERE loan_id = ? OR series_id = ?", (loan_id, series_id))
+    conn.execute("DELETE FROM loan_rows WHERE loan_id = ?", (loan_id,))
+    conn.execute("DELETE FROM series WHERE loan_id = ? OR id = ?", (loan_id, series_id if series_id is not None else -1))
+
+
+def _insert_loan_schedule(conn, loan_id, context, name, account_id, category_id, preview, already):
+    for row in preview["rows"]:
+        conn.execute(
+            "INSERT INTO loan_rows (loan_id, number, due_on, installment, interest, amortization, balance) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (loan_id, row["number"], row["due_on"], row["installment"], row["interest"], row["amortization"], row["balance"]),
+        )
+    series = conn.execute(
+        """
+        INSERT INTO series (
+            context, direction, account_id, category_id, subcategory_id, amount, day_of_month,
+            description, start_month, month_count, active, loan_id, created_at
+        ) VALUES (?, 'saida', ?, ?, NULL, ?, ?, ?, ?, ?, 1, ?, ?)
+        """,
+        (
+            context, account_id, category_id, preview["installment"], date.fromisoformat(preview["rows"][0]["due_on"]).day,
+            name, preview["rows"][0]["due_on"][:7], preview["term_months"], loan_id, now(),
+        ),
+    )
+    series_id = series.lastrowid
+    conn.execute("UPDATE loans SET series_id = ? WHERE id = ?", (series_id, loan_id))
+    for row in preview["rows"]:
+        status = "efetivado" if row["number"] <= already else "previsto"
+        conn.execute(
+            """
+            INSERT INTO transactions (
+                context, direction, account_id, transfer_account_id, category_id, subcategory_id,
+                amount, occurred_on, status, description, series_id, detached, loan_id,
+                installment_no, counts_as_revenue, created_at
+            ) VALUES (?, 'saida', ?, NULL, ?, NULL, ?, ?, ?, ?, ?, 0, ?, ?, 0, ?)
+            """,
+            (
+                context, account_id, category_id, row["installment"], row["due_on"], status,
+                f"{name} {row['number']}/{preview['term_months']}", series_id, loan_id, row["number"], now(),
+            ),
+        )
+
+
+def update_loan(loan_id, payload):
+    current = get_loan(loan_id)
+    context = current["context"]
+    name = clean_name(payload.get("name") or current["name"], "Nome")
+    preview = preview_loan({
+        "principal": payload.get("principal", current["principal"]),
+        "monthly_rate": payload.get("monthly_rate"),
+        "system": payload.get("system") or current["system"],
+        "term_months": payload.get("term_months") or current["term_months"],
+        "installment": payload.get("installment"),
+        "first_due": payload.get("first_due") or current["first_due"],
+        "iof": current["iof"],
+        "fees": current["fees"],
+        "insurance": current["insurance"],
+    })
+    already = int(payload.get("already_paid") or 0)
+    if already < 0 or already > preview["term_months"]:
+        raise ValueError("A quantidade de parcelas já pagas é inválida.")
+    same_terms = _loan_terms_match(current, payload, preview)
+    history = any(row["status"] != "previsto" for row in current["rows"])
+    if not same_terms and history:
+        raise ValueError("Já há parcela paga ou cancelada. Dá para mudar o nome, a conta e o tipo. Para mudar valor, taxa ou prazo, apague o contrato e lance de novo.")
+    with connect() as conn:
+        account = _account_in_context(conn, payload.get("account_id") or current["account_id"], context)
+        category_id, _ = _validate_category(conn, context, "saida", payload.get("category_id") or current["category_id"], None)
+        if same_terms:
+            conn.execute(
+                "UPDATE loans SET name = ?, account_id = ?, category_id = ? WHERE id = ?",
+                (name, account["id"], category_id, loan_id),
+            )
+            conn.execute(
+                "UPDATE series SET account_id = ?, category_id = ?, description = ? WHERE loan_id = ?",
+                (account["id"], category_id, name, loan_id),
+            )
+            conn.execute(
+                """
+                UPDATE transactions
+                SET account_id = ?, category_id = ?, description = ? || ' ' || installment_no || '/' || ?
+                WHERE loan_id = ?
+                """,
+                (account["id"], category_id, name, current["term_months"], loan_id),
+            )
+        else:
+            rate = str(_loan_rate(payload))
+            conn.execute(
+                """
+                UPDATE loans
+                SET name = ?, account_id = ?, category_id = ?, principal = ?, monthly_rate = ?, system = ?,
+                    term_months = ?, installment = ?, first_due = ?, already_paid = ?
+                WHERE id = ?
+                """,
+                (
+                    name, account["id"], category_id, clean_amount(payload.get("principal")), rate,
+                    payload.get("system") or "price", preview["term_months"], preview["installment"],
+                    clean_date(payload.get("first_due")), already, loan_id,
+                ),
+            )
+            _clear_loan_children(conn, loan_id, current["series_id"])
+            _insert_loan_schedule(conn, loan_id, context, name, account["id"], category_id, preview, already)
+    return get_loan(loan_id)
+
+
+def delete_loan(loan_id):
+    current = get_loan(loan_id)
+    with connect() as conn:
+        _clear_loan_children(conn, loan_id, current["series_id"])
+        deleted = conn.execute("DELETE FROM loans WHERE id = ?", (loan_id,)).rowcount
+    if not deleted:
+        raise ValueError("Empréstimo não encontrado.")
 
 
 def list_loans(context):

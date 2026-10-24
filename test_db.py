@@ -158,6 +158,54 @@ class RequirementTests(unittest.TestCase):
         self.assertEqual(cancelled["status"], "cancelado")
         self.assertNotEqual(again["remaining"], loan["principal"])
 
+    def test_loan_can_be_renamed_rebuilt_and_deleted(self):
+        payload = {
+            "context": "pf", "name": "Teste", "account_id": self.account["id"],
+            "category_id": self.expense["id"], "principal": 100000, "monthly_rate": "1,00",
+            "term_months": 3, "first_due": "2026-11-10", "system": "price", "already_paid": 0,
+        }
+        loan = db.create_loan(payload)
+        renamed = db.update_loan(loan["id"], {**payload, "name": "Renomeado"})
+        self.assertEqual(renamed["name"], "Renomeado")
+        self.assertEqual(renamed["principal"], 100000)
+        self.assertTrue(any(item["description"].startswith("Renomeado") for item in db.list_transactions("pf", "2026-11")))
+        rebuilt = db.update_loan(loan["id"], {**payload, "name": "Renomeado", "principal": 200000, "term_months": 2})
+        self.assertEqual(rebuilt["term_months"], 2)
+        self.assertEqual(len(rebuilt["rows"]), 2)
+        paid = db.create_loan({**payload, "name": "Pago", "already_paid": 1, "first_due": "2026-01-10"})
+        with self.assertRaises(ValueError):
+            db.update_loan(paid["id"], {**payload, "name": "Pago", "already_paid": 1, "first_due": "2026-01-10", "principal": 50000})
+        kept = db.update_loan(paid["id"], {**payload, "name": "Pago novo", "already_paid": 1, "first_due": "2026-01-10"})
+        self.assertEqual(kept["name"], "Pago novo")
+        self.assertEqual(kept["principal"], 100000)
+        db.delete_loan(loan["id"])
+        with self.assertRaises(ValueError):
+            db.get_loan(loan["id"])
+        self.assertFalse(any(item["description"].startswith("Renomeado") for item in db.list_transactions("pf")))
+
+    def test_unused_account_can_be_deleted_and_a_used_one_cannot(self):
+        spare = db.create_account("pf", "Vazia")
+        self.assertTrue(spare["deletable"])
+        db.delete_account(spare["id"])
+        db.create_transaction({
+            "context": "pf", "direction": "saida", "account_id": self.account["id"],
+            "category_id": self.expense["id"], "amount": 1000, "occurred_on": "2026-10-10", "status": "previsto",
+        })
+        used = next(item for item in db.list_accounts("pf", True) if item["id"] == self.account["id"])
+        self.assertFalse(used["deletable"])
+        with self.assertRaises(ValueError):
+            db.delete_account(self.account["id"])
+
+    def test_user_can_be_edited_and_another_user_can_be_deleted(self):
+        created = db.create_user("Ana", "ana@example.com", "segredo", "user")
+        edited = db.update_user(created["id"], "Ana Maria", "ana@example.com", "user")
+        self.assertEqual(edited["name"], "Ana Maria")
+        admin = next(user for user in db.list_users() if user["role"] == "admin")
+        with self.assertRaises(ValueError):
+            db.delete_user(admin["id"], admin["id"])
+        db.delete_user(created["id"], admin["id"])
+        self.assertFalse(any(user["email"] == "ana@example.com" for user in db.list_users()))
+
     def test_settle_marks_only_elapsed_installments(self):
         loan = db.create_loan({
             "context": "pf", "name": "Atraso", "account_id": self.account["id"],

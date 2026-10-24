@@ -123,6 +123,9 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(201, db.create_account(context, payload.get("name")))
             elif method == "PUT" and len(parts) == 3 and parts[1] == "accounts":
                 self._send(200, db.update_account(int(parts[2]), payload.get("name"), payload.get("active")))
+            elif method == "DELETE" and len(parts) == 3 and parts[1] == "accounts":
+                db.delete_account(int(parts[2]))
+                self._send(200, {"ok": True})
             elif method == "POST" and parsed.path == "/api/categories":
                 self._send(201, db.create_category(context, payload.get("direction"), payload.get("name")))
             elif method == "PUT" and len(parts) == 3 and parts[1] == "categories":
@@ -159,6 +162,11 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(201, db.create_loan(payload))
             elif method == "POST" and len(parts) == 4 and parts[1] == "loans" and parts[3] == "settle":
                 self._send(200, db.settle_elapsed_installments(int(parts[2])))
+            elif method == "PUT" and len(parts) == 3 and parts[1] == "loans":
+                self._send(200, db.update_loan(int(parts[2]), payload))
+            elif method == "DELETE" and len(parts) == 3 and parts[1] == "loans":
+                db.delete_loan(int(parts[2]))
+                self._send(200, {"ok": True})
             elif method == "POST" and parsed.path == "/api/goals":
                 self._send(201, db.create_goal(context, payload.get("name"), payload.get("target_amount"), payload.get("target_date")))
             elif method == "PUT" and len(parts) == 3 and parts[1] == "goals":
@@ -186,10 +194,17 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(201, db.create_user(payload.get("name"), payload.get("email"), payload.get("password"), "user"))
             elif method == "PUT" and len(parts) == 3 and parts[1] == "users":
                 self._admin(user)
-                if "active" in payload:
-                    db.set_user_active(int(parts[2]), payload.get("active"))
-                if payload.get("password"):
-                    db.reset_password(int(parts[2]), payload.get("password"))
+                if payload.get("name") or payload.get("email"):
+                    self._send(200, db.update_user(int(parts[2]), payload.get("name"), payload.get("email"), payload.get("role") or "user", payload.get("password") or None))
+                else:
+                    if "active" in payload:
+                        db.set_user_active(int(parts[2]), payload.get("active"))
+                    if payload.get("password"):
+                        db.reset_password(int(parts[2]), payload.get("password"))
+                    self._send(200, {"ok": True})
+            elif method == "DELETE" and len(parts) == 3 and parts[1] == "users":
+                self._admin(user)
+                db.delete_user(int(parts[2]), user["id"])
                 self._send(200, {"ok": True})
             elif method == "POST" and parsed.path == "/api/erase":
                 self._admin(user)
