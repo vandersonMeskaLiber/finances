@@ -181,6 +181,14 @@ label { display: grid; gap: 6px; font-size: 14px; }
 input, select {
   height: 42px; border-radius: 12px; border: 1px solid var(--line); padding: 0 12px; background: white; width: 100%;
 }
+.reais {
+  display: flex; align-items: center; height: 42px; border-radius: 12px;
+  border: 1px solid var(--line); background: white; padding-left: 12px;
+}
+.reais:focus-within { border-color: var(--accent); }
+.reais > span { color: var(--muted); font-weight: 600; }
+.reais input { border: 0; background: transparent; height: 40px; min-width: 0; padding-left: 8px; }
+.reais input:focus { outline: none; }
 label.check { display: flex; align-items: center; gap: 8px; }
 input[type="checkbox"] { width: 18px; height: 18px; padding: 0; accent-color: var(--green); }
 .pair { display: grid; grid-template-columns: 1fr 110px; gap: 12px; }

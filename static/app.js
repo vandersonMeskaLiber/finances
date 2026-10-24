@@ -573,7 +573,7 @@ function openTransaction(existing, preset) {
   const title = existing ? "Editar lançamento" : item.direction === "investimento" ? "Novo investimento" : "Novo lançamento";
   modal(`<form id="form"><h2>${title}</h2>
     <label>Direção<select name="direction">${["saida", "entrada", "investimento", "transferencia"].map((direction) => `<option value="${direction}" ${item.direction === direction ? "selected" : ""}>${labelDirection(direction)}</option>`).join("")}</select></label>
-    <label>Valor<input name="amount" required value="${existing ? (existing.amount / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2 }) : ""}"></label>
+    <label>Valor<span class="reais"><span>R$</span><input name="amount" inputmode="numeric" autocomplete="off" placeholder="0,00" required value="${existing ? formatReaisInput(existing.amount) : ""}"></span></label>
     <label>Data<input type="date" name="occurred_on" required value="${item.occurred_on}"></label>
     <label>Descrição<input name="description" value="${escapeHtml(item.description || "")}"></label>
     <label>Conta<select name="account_id">${options(state.accounts.filter((account) => account.active), item.account_id)}</select></label>
@@ -594,6 +594,9 @@ function openTransaction(existing, preset) {
     <div class="row"><button type="button" id="cancel" class="ghost">Cancelar</button>${existing ? `<button type="button" id="erase" class="danger">Apagar</button>` : ""}${existing ? `<button type="button" id="drop" class="ghost">Cancelar lançamento</button>` : ""}<button class="primary" type="submit">Salvar</button></div>
   </form>`);
   const form = document.querySelector("#form");
+  form.amount.addEventListener("input", () => {
+    form.amount.value = formatReaisInput(form.amount.value);
+  });
   const sync = () => {
     const direction = form.direction.value;
     document.querySelector("#dest").hidden = direction !== "transferencia";
@@ -898,6 +901,14 @@ function find(items, id) { return items.find((item) => String(item.id) === Strin
 function labelDirection(direction) { return { entrada: "Entrada", saida: "Saída", investimento: "Investimento", transferencia: "Transferência" }[direction]; }
 function money(cents) { return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format((cents || 0) / 100); }
 function balanceTone(cents) { if (cents > 0) return "positive"; if (cents < 0) return "negative"; return "zero"; }
+function formatReaisInput(raw) {
+  const digits = String(raw ?? "").replace(/\D/g, "").replace(/^0+(?=\d)/, "");
+  if (!digits) return "";
+  const padded = digits.padStart(3, "0");
+  const cents = padded.slice(-2);
+  const whole = padded.slice(0, -2).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return `${whole},${cents}`;
+}
 function parseMoney(value, allowZero = false) {
   let text = String(value || "").trim().replace(/[R$\s]/g, "");
   if (!text) return allowZero ? 0 : 0;
