@@ -297,9 +297,17 @@ function renderLancamentos() {
     if (state.filter.day && item.occurred_on !== state.filter.day) return false;
     return true;
   });
-  const filter = state.filter.pending ? "Pendências" : state.filter.day ? formatDate(state.filter.day) : state.filter.direction ? labelDirection(state.filter.direction) : "";
+  const filter = state.filter.pending ? "Pendências" : state.filter.direction ? labelDirection(state.filter.direction) : "";
+  const dayText = state.filter.day ? dayLabel(state.filter.day) : "Mês todo";
   return `<article class="panel">
-    ${filter ? `<div class="panel-head"><div class="row"><button type="button" class="pill" id="clear-filter">${filter} · limpar</button></div></div>` : ""}
+    <div class="panel-head">
+      <div class="month">
+        <button type="button" id="day-prev" class="icon" aria-label="Dia anterior">‹</button>
+        <button type="button" id="day-label" class="text-btn">${escapeHtml(dayText)}</button>
+        <button type="button" id="day-next" class="icon" aria-label="Próximo dia">›</button>
+      </div>
+      ${filter ? `<button type="button" class="pill" id="clear-filter">${filter} · limpar</button>` : ""}
+    </div>
     ${items.map(transactionRow).join("") || empty("Nenhum lançamento", "Neste recorte não há movimento. Um lançamento novo entra na capa no dia escolhido.")}
   </article>`;
 }
@@ -460,6 +468,18 @@ function bindView() {
   if (calNext) calNext.onclick = () => shiftCalendar(1);
   const clearFilter = document.querySelector("#clear-filter");
   if (clearFilter) clearFilter.onclick = () => { state.filter = {}; render(); };
+  const dayPrev = document.querySelector("#day-prev");
+  const dayNext = document.querySelector("#day-next");
+  const dayLabelButton = document.querySelector("#day-label");
+  if (dayPrev) dayPrev.onclick = () => shiftDay(-1);
+  if (dayNext) dayNext.onclick = () => shiftDay(1);
+  if (dayLabelButton) dayLabelButton.onclick = () => {
+    if (!state.filter.day) return;
+    const next = { ...state.filter };
+    delete next.day;
+    state.filter = next;
+    render();
+  };
   document.querySelectorAll("[data-tx]").forEach((button) => button.onclick = () => openTransaction(find(state.transactions, button.dataset.tx)));
   document.querySelectorAll("[data-del-tx]").forEach((button) => button.onclick = () => removeTransaction(find(state.transactions, button.dataset.delTx)));
   document.querySelectorAll("[data-account]").forEach((button) => button.onclick = () => openAccount(find(state.accounts, button.dataset.account)));
@@ -547,7 +567,9 @@ function openCreate() {
 
 function openTransaction(existing, preset) {
   if (!state.accounts.length) return openAccount();
-  const item = existing || { direction: preset || "saida", amount: "", occurred_on: new Date().toISOString().slice(0, 10), description: "", account_id: state.accounts[0].id, status: "previsto" };
+  const today = new Date();
+  const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const item = existing || { direction: preset || "saida", amount: "", occurred_on: state.filter.day || todayIso, description: "", account_id: state.accounts[0].id, status: "previsto" };
   const title = existing ? "Editar lançamento" : item.direction === "investimento" ? "Novo investimento" : "Novo lançamento";
   modal(`<form id="form"><h2>${title}</h2>
     <label>Direção<select name="direction">${["saida", "entrada", "investimento", "transferencia"].map((direction) => `<option value="${direction}" ${item.direction === direction ? "selected" : ""}>${labelDirection(direction)}</option>`).join("")}</select></label>
@@ -885,6 +907,29 @@ function parseMoney(value, allowZero = false) {
   return amount;
 }
 function formatDate(value) { const [year, month, day] = value.split("-"); return `${day}/${month}/${year}`; }
+function dayLabel(value) {
+  const [year, month, day] = value.split("-").map(Number);
+  const label = new Intl.DateTimeFormat("pt-BR", { day: "numeric", month: "long" }).format(new Date(year, month - 1, day));
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+function isoFromDate(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+function addDays(value, delta) {
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  date.setDate(date.getDate() + delta);
+  return isoFromDate(date);
+}
+function clampDay(month, day) {
+  const [year, mon] = month.split("-").map(Number);
+  const last = new Date(year, mon, 0).getDate();
+  return `${month}-${String(Math.min(day, last)).padStart(2, "0")}`;
+}
+function lastDayOf(month) {
+  const [year, mon] = month.split("-").map(Number);
+  return clampDay(month, new Date(year, mon, 0).getDate());
+}
 function monthLabel(month) { const [year, mon] = month.split("-").map(Number); const label = new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(new Date(year, mon - 1, 1)); return label.charAt(0).toUpperCase() + label.slice(1); }
 function currentMonth() { const now = new Date(); return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`; }
 function addMonth(month, delta) {
@@ -893,9 +938,22 @@ function addMonth(month, delta) {
   return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}`;
 }
 async function shiftMonth(delta) {
+  const selectedDay = state.filter.day ? Number(state.filter.day.slice(8, 10)) : null;
   state.month = addMonth(state.month, delta);
   state.calendarMonth = state.month;
+  if (selectedDay) state.filter = { ...state.filter, day: clampDay(state.month, selectedDay) };
   await refresh();
+  render();
+}
+async function shiftDay(delta) {
+  const current = state.filter.day;
+  const next = current ? addDays(current, delta) : delta > 0 ? `${state.month}-01` : lastDayOf(state.month);
+  state.filter = { ...state.filter, day: next };
+  if (next.slice(0, 7) !== state.month) {
+    state.month = next.slice(0, 7);
+    state.calendarMonth = state.month;
+    await refresh();
+  }
   render();
 }
 async function shiftCalendar(delta) {

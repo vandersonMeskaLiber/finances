@@ -83,6 +83,11 @@ h2 { font-size: 22px; }
 
 .month { display: flex; align-items: center; gap: 4px; background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 4px; }
 .month strong { min-width: 168px; text-align: center; font-size: 14px; font-weight: 600; }
+.month .text-btn {
+  min-width: 148px; height: 34px; border: 0; background: transparent; border-radius: 999px;
+  padding: 0 8px; font-size: 14px; font-weight: 600;
+}
+.month .text-btn:hover { background: var(--cream); }
 .icon {
   width: 34px; height: 34px; border-radius: 999px; border: 0; background: transparent; padding: 0; font-size: 20px; line-height: 1;
 }
@@ -208,7 +213,7 @@ input[type="checkbox"] { width: 18px; height: 18px; padding: 0; accent-color: va
   .top .row { width: 100%; flex-wrap: nowrap; }
   .top .primary { padding: 0 12px; }
   .month { flex: 0 1 auto; }
-  .month strong { min-width: 0; white-space: nowrap; font-size: 13px; }
+  .month strong, .month .text-btn { min-width: 0; white-space: nowrap; font-size: 13px; }
   .nowrap { white-space: nowrap; }
   .nav { mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
   h1 { font-size: 32px; }
