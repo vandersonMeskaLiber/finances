@@ -155,7 +155,8 @@ class RequirementTests(unittest.TestCase):
         self.assertEqual(loan["total_interest"], 20000)
         self.assertEqual(loan["rows"][-1]["balance"], 0)
         self.assertEqual([row["status"] for row in loan["rows"]], ["previsto", "previsto", "previsto"])
-        self.assertEqual(loan["remaining"], 100000)
+        self.assertEqual(loan["remaining"], sum(row["open_balance"] for row in loan["rows"]))
+        self.assertTrue(all(row["open_balance"] > 0 for row in loan["rows"]))
         launched = [item for item in db.list_transactions("pf", "2026-11") if item["description"].startswith("Carro")]
         self.assertEqual([item["amount"] for item in launched], [40000])
         with self.assertRaises(ValueError):
@@ -174,21 +175,38 @@ class RequirementTests(unittest.TestCase):
         }, today=date(2026, 10, 31))
         self.assertEqual([row["installment"] for row in loan["rows"]], [128_632] * 48)
         self.assertEqual(loan["rows"][-1]["balance"], 0)
-        self.assertEqual(loan["rows"][0]["interest"], 73687)
-        self.assertEqual(loan["rows"][16]["balance"], 3_036_007)
-        self.assertEqual(loan["balance_on_due"], 3_036_007)
-        self.assertEqual(loan["remaining"], 3_075_765)
+        self.assertLess(loan["rows"][0]["interest"], loan["rows"][-1]["interest"])
+        self.assertGreater(loan["rows"][0]["amortization"], loan["rows"][-1]["amortization"])
+        self.assertEqual(loan["rows"][0]["open_balance"], 0)
+        self.assertGreater(loan["remaining"], 0)
         self.assertEqual(loan["monthly_rate"], "0.0179")
         self.assertEqual(sum(1 for row in loan["rows"] if row["status"] == "efetivado"), 17)
         other = db.update_loan(loan["id"], {
             "name": "Financiamento Carro", "account_id": self.account["id"],
             "category_id": self.expense["id"], "principal": 4_116_590,
             "installment": 128_632, "term_months": 48, "first_due": "2025-06-09",
-            "monthly_rate": "2,10",
+            "monthly_rate": "1,50",
         })
-        self.assertEqual(other["monthly_rate"], "0.021")
+        self.assertEqual(other["monthly_rate"], "0.015")
         self.assertNotEqual(other["rows"][0]["interest"], loan["rows"][0]["interest"])
         self.assertTrue(all(row["installment"] == 128_632 for row in other["rows"]))
+
+    def test_pan_schedule_follows_the_bank_table(self):
+        loan = db.create_loan({
+            "context": "pf", "name": "Pan", "account_id": self.account["id"],
+            "category_id": self.expense["id"], "principal": 4_116_590,
+            "installment": 128_632, "term_months": 48, "first_due": "2025-06-09",
+            "monthly_rate": "1,76567",
+        }, today=date(2026, 10, 31))
+        self.assertEqual(loan["rows"][0]["interest"], 2305)
+        self.assertEqual(loan["rows"][0]["amortization"], 126327)
+        self.assertEqual(loan["rows"][17]["interest"], 35254)
+        self.assertEqual(loan["rows"][17]["amortization"], 93378)
+        self.assertEqual(loan["rows"][47]["interest"], 73783)
+        self.assertEqual(loan["rows"][47]["amortization"], 54849)
+        self.assertEqual(loan["rows"][0]["open_balance"], 0)
+        self.assertEqual(loan["rows"][17]["open_balance"], 127958)
+        self.assertEqual(loan["remaining"], 3_078_429)
 
     def test_started_loan_marks_past_installments_paid(self):
         loan = db.create_loan({
@@ -197,7 +215,10 @@ class RequirementTests(unittest.TestCase):
             "installment": 40000, "term_months": 3, "first_due": "2026-09-10",
         }, today=date(2026, 10, 31))
         self.assertEqual([row["status"] for row in loan["rows"]], ["efetivado", "efetivado", "previsto"])
-        self.assertGreater(loan["remaining"], loan["rows"][1]["balance"])
+        self.assertEqual(loan["rows"][0]["open_balance"], 0)
+        self.assertEqual(loan["rows"][1]["open_balance"], 0)
+        self.assertGreater(loan["rows"][2]["open_balance"], 0)
+        self.assertEqual(loan["remaining"], loan["rows"][2]["open_balance"])
         self.assertGreater(loan["remaining"], 0)
         self.assertLess(loan["remaining"], loan["principal"])
 

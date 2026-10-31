@@ -872,7 +872,7 @@ function openLoan(loan) {
   const today = isoFromDate(new Date());
   const late = loan.rows.filter((row) => row.status === "previsto" && row.due_on < today).length;
   const rate = rateLabel(loan.monthly_rate);
-  modal(`<div><h2>${escapeHtml(loan.name)}</h2><p>${rate ? `Taxa ${rate}. ` : ""}Juros totais ${money(loan.total_interest)}. Saldo devedor ${money(loan.remaining)} em ${formatDate(today)}.</p><p class="tag">Esse saldo traz a dívida até hoje, pela taxa deste contrato. Em cada vencimento, o valor é o que resta depois da parcela.</p>${late ? `<p class="tag">${late} parcelas já venceram e ainda estão previstas.</p><button type="button" id="settle" class="primary">Marcar vencidas como pagas</button>` : ""}${loan.rows.map((row) => `<div class="item"><span>${formatDate(row.due_on)}</span><span>Juros ${money(row.interest)} · amortiza ${money(row.amortization)}</span><strong>${money(row.balance)} · ${row.status}</strong></div>`).join("")}<div class="row"><button type="button" id="cancel" class="ghost">Fechar</button></div></div>`);
+  modal(`<div><h2>${escapeHtml(loan.name)}</h2><p>${rate ? `Taxa ${rate}. ` : ""}Juros totais ${money(loan.total_interest)}. Saldo devedor ${money(loan.remaining)} em ${formatDate(today)}.</p><p class="tag">A amortização diminui ao longo do contrato e o juro é o que sobra da parcela. Parcela paga fica com saldo zero. Parcela em aberto mostra o valor dela hoje.</p>${late ? `<p class="tag">${late} parcelas já venceram e ainda estão previstas.</p><button type="button" id="settle" class="primary">Marcar vencidas como pagas</button>` : ""}${loan.rows.map((row) => `<div class="item"><span>${formatDate(row.due_on)}</span><span>Juros ${money(row.interest)} · amortiza ${money(row.amortization)}</span><strong>${money(row.open_balance)} · ${row.status}</strong></div>`).join("")}<div class="row"><button type="button" id="cancel" class="ghost">Fechar</button></div></div>`);
   const settle = document.querySelector("#settle");
   if (settle) settle.onclick = async () => {
     const accepted = await ask("Marcar vencidas como pagas", "As parcelas com vencimento anterior a hoje passam para efetivado. O saldo acumulado da capa não muda, porque elas já entravam na conta.", "Marcar");
@@ -1092,14 +1092,14 @@ function money(cents) { return new Intl.NumberFormat("pt-BR", { style: "currency
 function rateLabel(rate) {
   const value = Number(rate);
   if (!Number.isFinite(value) || value < 0) return "";
-  const text = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value * 100);
+  const text = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 5 }).format(value * 100);
   return `${text}% ao mês`;
 }
 
 function formatPercentInput(rate) {
   const value = Number(rate);
   if (!Number.isFinite(value) || value < 0) return "";
-  return new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 4 }).format(value * 100);
+  return new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 5 }).format(value * 100);
 }
 
 function parsePercent(value) {

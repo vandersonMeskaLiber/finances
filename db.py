@@ -3,7 +3,7 @@ import hashlib
 import secrets
 import sqlite3
 from datetime import date, datetime, timedelta
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from decimal import Decimal, InvalidOperation, ROUND_DOWN, ROUND_HALF_UP
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -1235,13 +1235,14 @@ def clean_monthly_rate(value):
     return percent / Decimal(100)
 
 
-def bring_forward(balance, rate, start, end):
-    balance = int(balance)
-    rate = Decimal(rate or 0)
-    if balance <= 0 or rate <= 0 or start is None or end <= start:
-        return balance
-    grown = Decimal(balance) * (Decimal(1) + rate) ** (Decimal((end - start).days) / Decimal(30))
-    return int(grown.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+def present_installment(amount, rate, due, today, status):
+    if status != "previsto":
+        return 0
+    if due <= today or rate <= 0:
+        return int(amount)
+    days = Decimal((due - today).days)
+    value = Decimal(int(amount)) / ((Decimal(1) + rate) ** (days / Decimal(30)))
+    return int(value.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
 def build_fixed_schedule(principal, installment, term, first_due, monthly_rate):
@@ -1255,62 +1256,36 @@ def build_fixed_schedule(principal, installment, term, first_due, monthly_rate):
     if rate < 0:
         raise ValueError("Taxa inválida.")
     first = date.fromisoformat(clean_date(first_due))
+    dues = []
+    for offset in range(term):
+        year, mon = shift_month(first.year, first.month, offset)
+        dues.append(occurrence_date(year, mon, first.day))
+    one = Decimal(1)
+    if rate == 0:
+        weights = [one] * term
+    else:
+        weights = [one / ((one + rate) ** (Decimal((due - dues[0]).days) / Decimal(30))) for due in dues]
+    total_weight = sum(weights)
+    raws = [Decimal(principal) * weight / total_weight for weight in weights]
+    cents = [int(raw.to_integral_value(rounding=ROUND_DOWN)) for raw in raws]
+    gap = principal - sum(cents)
+    order = sorted(range(term), key=lambda index: (raws[index] - Decimal(cents[index]), -index), reverse=True)
+    for index in order[:gap]:
+        cents[index] += 1
+    if any(share < 0 or share > installment for share in cents):
+        raise ValueError("Nessa taxa, a parcela não cobre o juro do saldo.")
     rows = []
     balance = principal
-    for number in range(1, term):
-        raw = Decimal(balance) * rate
-        interest = int(raw.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
-        if interest < 0:
-            interest = 0
-        if interest > installment:
-            interest = installment
-        # O arredondamento pode comer a amortização inteira mesmo com o juro
-        # ainda menor que a parcela. Sem esse centavo o saldo não anda.
-        if interest == installment and raw < Decimal(installment) and balance > 0:
-            interest = installment - 1
-        amortization = installment - interest
-        if amortization > balance:
-            amortization = balance
-            interest = installment - amortization
-        balance -= amortization
-        year, mon = shift_month(first.year, first.month, number - 1)
+    for number, due, amort in zip(range(1, term + 1), dues, cents):
+        balance -= amort
         rows.append({
             "number": number,
-            "due_on": occurrence_date(year, mon, first.day).isoformat(),
+            "due_on": due.isoformat(),
             "installment": installment,
-            "interest": interest,
-            "amortization": amortization,
+            "interest": installment - amort,
+            "amortization": amort,
             "balance": balance,
         })
-    if balance > installment:
-        gap = balance - installment
-        for row in reversed(rows):
-            move = min(row["interest"], gap)
-            if move:
-                row["interest"] -= move
-                row["amortization"] += move
-                gap -= move
-            if gap == 0:
-                break
-        if gap:
-            raise ValueError("Nessa taxa, a parcela não cobre o juro do saldo.")
-        balance = principal
-        for row in rows:
-            balance -= row["amortization"]
-            row["balance"] = balance
-    year, mon = shift_month(first.year, first.month, term - 1)
-    amortization = balance
-    interest = installment - amortization
-    if interest < 0 or amortization < 0:
-        raise ValueError("Nessa taxa, a parcela não cobre o juro do saldo.")
-    rows.append({
-        "number": term,
-        "due_on": occurrence_date(year, mon, first.day).isoformat(),
-        "installment": installment,
-        "interest": interest,
-        "amortization": amortization,
-        "balance": 0,
-    })
     return rows
 
 
@@ -1432,20 +1407,11 @@ def get_loan(loan_id, today=None):
         link = paid_map.get(number)
         return link["status"] if link else "previsto"
 
-    open_row = next((item for item in schedule if status_of(item["number"]) == "previsto"), None)
-    anchor = None
-    if open_row is None:
-        last_paid = next((item for item in reversed(schedule) if status_of(item["number"]) == "efetivado"), None)
-        base = 0 if last_paid and last_paid["number"] == schedule[-1]["number"] else (last_paid["balance"] if last_paid else data["principal"])
-    else:
-        previous = next((item for item in schedule if item["number"] == open_row["number"] - 1), None)
-        if previous:
-            base = previous["balance"]
-            anchor = date.fromisoformat(previous["due_on"])
-        else:
-            base = data["principal"]
-    data["balance_on_due"] = base
-    data["remaining"] = bring_forward(base, data.get("monthly_rate"), anchor, today)
+    rate = Decimal(data.get("monthly_rate") or "0")
+    for item in schedule:
+        due = date.fromisoformat(item["due_on"])
+        item["open_balance"] = present_installment(item["installment"], rate, due, today, item["status"])
+    data["remaining"] = sum(item["open_balance"] for item in schedule)
     data["total_interest"] = sum(item["interest"] for item in schedule)
     return data
 
@@ -1525,13 +1491,28 @@ def update_loan(loan_id, payload):
     current = get_loan(loan_id)
     context = current["context"]
     name = clean_name(payload.get("name") or current["name"], "Nome")
+    principal = clean_amount(payload.get("principal", current["principal"]))
+    installment = clean_amount(payload.get("installment", current["installment"]))
+    term = clean_term(payload.get("term_months") or current["term_months"])
+    first_due = clean_date(payload.get("first_due") or current["first_due"])
     raw_rate = payload.get("monthly_rate")
-    rate = Decimal(current["monthly_rate"] or "0") if raw_rate in ("", None) else clean_monthly_rate(raw_rate)
+    same_money = (
+        principal == current["principal"]
+        and installment == current["installment"]
+        and term == current["term_months"]
+        and first_due == current["first_due"]
+    )
+    if raw_rate not in ("", None):
+        rate = clean_monthly_rate(raw_rate)
+    elif same_money:
+        rate = Decimal(current["monthly_rate"] or "0")
+    else:
+        rate = implied_monthly_rate(principal, installment, term)
     preview = preview_loan({
-        "principal": payload.get("principal", current["principal"]),
-        "term_months": payload.get("term_months") or current["term_months"],
-        "installment": payload.get("installment", current["installment"]),
-        "first_due": payload.get("first_due") or current["first_due"],
+        "principal": principal,
+        "term_months": term,
+        "installment": installment,
+        "first_due": first_due,
     }, rate=rate)
     same_terms = _loan_terms_match(current, payload, preview)
     history = any(row["status"] != "previsto" for row in current["rows"])
