@@ -23,7 +23,7 @@ Estes pontos vieram de produtos e métodos que já resolvem partes do que você 
 - **Conta não mensal vira reserva mensal.** A segunda regra do YNAB divide uma despesa anual por 12. Isso alimenta metas: o sistema diz quanto guardar por mês para chegar na data.
 - **Atraso de meta se corrige nos meses seguintes.** Se o mês ficou abaixo, o valor que falta se redistribui no prazo que resta. A meta final continua a mesma. É o mesmo raciocínio de um fundo de reserva com data.
 - **Recorrência com duas edições.** Você pediu alterar só aquele mês ou alterar todas. O requisito segue isso. Ocorrência já paga não muda junto com a série, para o mês fechado não ser reescrito.
-- **A parcela do empréstimo é o valor que a pessoa paga.** A pessoa informa valor tomado, prazo, data e valor da parcela. O sistema não pede taxa e não recalcula o boleto, porque a parcela saída de uma taxa digitada quase nunca fecha com o banco. O juros do contrato é o total das parcelas menos o valor tomado. Em cada mês, esse juros incide sobre o saldo que ainda resta, pela taxa embutida na parcela. A última parcela zera o saldo. Parcela já vencida entra como paga, para servir tanto a um contrato novo quanto a um que já está em andamento.
+- **A parcela do empréstimo é o valor que a pessoa paga.** A pessoa informa valor tomado, prazo, data, valor da parcela e a taxa ao mês daquele contrato. Cada contrato tem a própria taxa. O sistema não recalcula o boleto. O juros de cada mês incide sobre o saldo que ainda resta, por essa taxa. A última parcela zera o saldo. O saldo devedor da lista é esse saldo trazido até hoje. Parcela já vencida entra como paga, para servir tanto a um contrato novo quanto a um que já está em andamento.
 - **MEI em 2026.** O teto vigente é R$ 81.000,00 por ano. No ano de abertura, o teto é proporcional: R$ 6.750,00 por mês de atividade, contando o mês da abertura inteiro. Até 20% acima (R$ 97.200,00) há DAS complementar e a empresa vira microempresa no ano seguinte. Acima de 20%, o desenquadramento volta ao início do ano. O DAS vence no dia 20. Em 2026 o INSS do DAS é R$ 81,05, mais R$ 1,00 de ICMS e/ou R$ 5,00 de ISS. MEI transportador de cargas tem teto de R$ 251.600,00 e INSS de R$ 194,52. A DASN-SIMEI do ano anterior vence em 31 de maio. O Finances acompanha e alerta. Não emite guia e não entrega declaração.
 - **Instalável agora, loja depois.** Chrome, Edge e Firefox instalam o sistema quando ele é servido em HTTPS, tem manifesto com nome, ícones de 192 e 512 pixels, `start_url` e `display` standalone. A Play Store aceita esse app embrulhado como Trusted Web Activity. A App Store não aceita um site reempacotado: o app precisa se comportar como aplicativo. Por isso nenhuma função pode depender de mouse, hover ou tela larga.
 
@@ -159,11 +159,11 @@ RF-SIT-04. Uma ocorrência pode ser cancelada. Cancelado sai dos totais e do pan
 
 RF-EMP-01. Um empréstimo é um contrato de um contexto, ligado à conta de onde a parcela sai. Dívida em dois lugares são dois contratos. A tela de empréstimos soma os contratos.
 
-RF-EMP-02. O cadastro pede só: nome, valor tomado, prazo em meses, data da parcela, valor da parcela, conta da parcela e tipo.
+RF-EMP-02. O cadastro pede: nome, valor tomado, prazo em meses, data da parcela, valor da parcela, taxa ao mês, conta da parcela e tipo. A taxa é a daquele contrato.
 
 RF-EMP-03. Cada parcela lançada é exatamente o valor informado, em todos os meses. O sistema não recalcula essa parcela.
 
-RF-EMP-04. O juros do contrato é o total das parcelas menos o valor tomado. Em cada mês, o juros incide sobre o saldo que ainda resta, pela taxa embutida na parcela informada. A amortização é a parcela menos esse juros. A última parcela deixa o saldo devedor em zero.
+RF-EMP-04. O juros do contrato é o total das parcelas menos o valor tomado. Em cada mês, o juros incide sobre o saldo que ainda resta, pela taxa ao mês informada. A amortização é a parcela menos esse juros. A última parcela deixa o saldo na data do vencimento em zero. O saldo devedor mostrado na lista traz esse saldo até o dia de hoje, contando o mês com 30 dias.
 
 RF-EMP-05. Se o total das parcelas for menor que o valor tomado, o contrato não é lançado.
 
@@ -173,7 +173,7 @@ RF-EMP-07. A evolução mostra, mês a mês, a parcela, o juros, a amortização
 
 RF-EMP-08. O contrato gera as parcelas como saídas da série, na conta escolhida, no tipo que a pessoa indicar. Pagar a parcela no lançamento atualiza a evolução do contrato.
 
-RF-EMP-09. Com parcela já paga ou cancelada, dá para mudar o nome, a conta e o tipo. Valor, prazo, data e parcela só mudam se o contrato for apagado e lançado de novo.
+RF-EMP-09. Com parcela já paga ou cancelada, dá para mudar o nome, a conta, o tipo e a taxa. Valor, prazo, data e parcela só mudam se o contrato for apagado e lançado de novo. Mudar a taxa refaz o juros e o saldo, e mantém o valor de cada parcela.
 
 RF-EMP-10. Antes de salvar, o cadastro mostra quantas parcelas serão lançadas, o juros e quantas já entram como pagas.
 
@@ -283,7 +283,7 @@ Estes são os conceitos, não o desenho do banco.
 - **Capa.** No dia 1 estão visíveis o saldo (entradas − saídas − investimentos), as entradas, as saídas, as pendências e os investimentos, além de todos os dias do mês. Dá para apontar o saldo do último dia.
 - **Dinheiro.** Uma saída sem conta não é salva. A conta pode se chamar "Carteira" sem estar ligada a um banco. O detalhe de uma entrada mostra a conta.
 - **Série.** Uma parcela de 5 meses gera 5 previstos. Alterar só um não muda os outros. Alterar todas não muda o que já foi pago.
-- **Empréstimo.** Valor tomado, prazo e parcela informada geram saídas desse valor. O juros de cada mês incide sobre o saldo, e a última parcela zera a dívida. Parcela já vencida entra paga. Pagar uma parcela reduz o saldo devedor.
+- **Empréstimo.** Valor tomado, prazo, parcela e taxa ao mês geram saídas do valor da parcela. O juros de cada mês incide sobre o saldo, a última parcela zera a dívida na data do vencimento, e o saldo da lista está na data de hoje. Parcela já vencida entra paga.
 - **Meta.** Com alvo e data, o sistema diz o valor do mês. A pessoa informa quanto guardou. Um mês abaixo aumenta o desafio dos meses seguintes e mantém o alvo.
 - **Empresa.** O faturamento do ano comparado ao teto de R$ 81.000,00 dispara os três alertas nos pontos certos. O DAS de um mês pode ser marcado como pago.
 - **Acesso.** Sem login a capa não abre. Usuário de um espaço não vê outro espaço.
@@ -313,5 +313,5 @@ Confirmadas em 18 de outubro de 2026:
 5. O número grande da capa carrega o saldo ou o déficit dos meses anteriores. A frase abaixo é só o que este mês gerou: entradas − saídas − investimentos. Ao lado entram entradas, saídas, pendências e investimentos. O saldo de cada conta bancária conta só o efetivado.
 6. Na meta, você informa quanto guardou. O sistema não calcula isso sozinho.
 7. Repetição todo mês, toda semana ou todo dia.
-8. Empréstimo pela parcela informada, sem taxa. Um contrato por conta. Parcela vencida entra como paga.
+8. Empréstimo pela parcela informada e pela taxa ao mês daquele contrato. Um contrato por conta. Parcela vencida entra como paga.
 9. Empresa só no contexto de pessoa jurídica, como acompanhamento, sem emitir guia.

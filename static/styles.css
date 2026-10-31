@@ -242,6 +242,7 @@ input, select {
 }
 .reais:focus-within { border-color: var(--accent); }
 .reais > span { color: var(--muted); font-weight: 600; }
+.reais > span:last-child { padding-right: 12px; }
 .reais input { border: 0; background: transparent; height: 40px; min-width: 0; padding-left: 8px; }
 .reais input:focus { outline: none; }
 label.check { display: flex; align-items: center; gap: 8px; }

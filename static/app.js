@@ -796,6 +796,7 @@ function openLoanForm(existing) {
     <label>Prazo em meses<input name="term_months" inputmode="numeric" required ${lock} value="${existing ? existing.term_months : ""}"></label>
     <label>Data da parcela<input type="date" name="first_due" required ${lock} value="${existing ? existing.first_due : isoFromDate(new Date())}"></label>
     <label>Valor da parcela<span class="reais"><span>R$</span><input name="installment" inputmode="numeric" autocomplete="off" placeholder="0,00" required ${lock} value="${existing ? formatReaisInput(existing.installment) : ""}"></span></label>
+    <label>Taxa ao mês<span class="reais"><input name="monthly_rate" inputmode="decimal" autocomplete="off" placeholder="0,00" required value="${existing ? formatPercentInput(existing.monthly_rate) : ""}"><span>%</span></span></label>
     <p class="tag" id="due-hint"></p>
     <label>Conta da parcela<select name="account_id">${options(accounts, existing && existing.account_id)}</select></label>
     <label>Tipo<select name="category_id">${saidas.map((category) => `<option value="${category.id}" ${existing && category.id === existing.category_id ? "selected" : ""}>${escapeHtml(category.name)}</option>`).join("")}</select></label>
@@ -807,7 +808,7 @@ function openLoanForm(existing) {
   const showHint = () => {
     const hint = document.querySelector("#due-hint");
     if (locked) {
-      hint.textContent = "Há parcela paga ou cancelada. Dá para mudar o nome, a conta e o tipo. Para mudar valor, prazo ou parcela, apague o contrato.";
+      hint.textContent = "Há parcela paga ou cancelada. Dá para mudar o nome, a conta, o tipo e a taxa. Para mudar valor, prazo ou parcela, apague o contrato.";
       return;
     }
     const principal = parseMoney(form.principal.value);
@@ -843,6 +844,7 @@ function openLoanForm(existing) {
       term_months: form.term_months.value,
       first_due: form.first_due.value,
       installment: parseMoney(form.installment.value),
+      monthly_rate: parsePercent(form.monthly_rate.value),
       account_id: Number(form.account_id.value),
       category_id: Number(form.category_id.value),
     };
@@ -870,7 +872,7 @@ function openLoan(loan) {
   const today = isoFromDate(new Date());
   const late = loan.rows.filter((row) => row.status === "previsto" && row.due_on < today).length;
   const rate = rateLabel(loan.monthly_rate);
-  modal(`<div><h2>${escapeHtml(loan.name)}</h2><p>${rate ? `Taxa ${rate}. ` : ""}Juros totais ${money(loan.total_interest)}. Saldo devedor ${money(loan.remaining)}.</p><p class="tag">O saldo de cada mês é o que ainda falta depois da parcela. O juro do mês incide sobre o saldo anterior.</p>${late ? `<p class="tag">${late} parcelas já venceram e ainda estão previstas.</p><button type="button" id="settle" class="primary">Marcar vencidas como pagas</button>` : ""}${loan.rows.map((row) => `<div class="item"><span>${formatDate(row.due_on)}</span><span>Juros ${money(row.interest)} · amortiza ${money(row.amortization)}</span><strong>${money(row.balance)} · ${row.status}</strong></div>`).join("")}<div class="row"><button type="button" id="cancel" class="ghost">Fechar</button></div></div>`);
+  modal(`<div><h2>${escapeHtml(loan.name)}</h2><p>${rate ? `Taxa ${rate}. ` : ""}Juros totais ${money(loan.total_interest)}. Saldo devedor ${money(loan.remaining)} em ${formatDate(today)}.</p><p class="tag">Esse saldo traz a dívida até hoje, pela taxa deste contrato. Em cada vencimento, o valor é o que resta depois da parcela.</p>${late ? `<p class="tag">${late} parcelas já venceram e ainda estão previstas.</p><button type="button" id="settle" class="primary">Marcar vencidas como pagas</button>` : ""}${loan.rows.map((row) => `<div class="item"><span>${formatDate(row.due_on)}</span><span>Juros ${money(row.interest)} · amortiza ${money(row.amortization)}</span><strong>${money(row.balance)} · ${row.status}</strong></div>`).join("")}<div class="row"><button type="button" id="cancel" class="ghost">Fechar</button></div></div>`);
   const settle = document.querySelector("#settle");
   if (settle) settle.onclick = async () => {
     const accepted = await ask("Marcar vencidas como pagas", "As parcelas com vencimento anterior a hoje passam para efetivado. O saldo acumulado da capa não muda, porque elas já entravam na conta.", "Marcar");
@@ -1089,9 +1091,23 @@ function money(cents) { return new Intl.NumberFormat("pt-BR", { style: "currency
 
 function rateLabel(rate) {
   const value = Number(rate);
-  if (!Number.isFinite(value) || value <= 0) return "";
+  if (!Number.isFinite(value) || value < 0) return "";
   const text = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value * 100);
   return `${text}% ao mês`;
+}
+
+function formatPercentInput(rate) {
+  const value = Number(rate);
+  if (!Number.isFinite(value) || value < 0) return "";
+  return new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 4 }).format(value * 100);
+}
+
+function parsePercent(value) {
+  let text = String(value || "").trim().replace("%", "").replace(/\s/g, "");
+  if (!text) throw new Error("Informe a taxa ao mês.");
+  if (text.includes(",")) text = text.replace(/\./g, "").replace(",", ".");
+  if (!/^\d+(\.\d+)?$/.test(text)) throw new Error("Taxa inválida.");
+  return text;
 }
 function balanceTone(cents) { if (cents > 0) return "positive"; if (cents < 0) return "negative"; return "zero"; }
 function bindReais(input) {
