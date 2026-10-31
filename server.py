@@ -148,7 +148,8 @@ class Handler(BaseHTTPRequestHandler):
             elif method == "POST" and len(parts) == 4 and parts[1] == "transactions" and parts[3] == "cancel":
                 self._send(200, db.cancel_transaction(int(parts[2])))
             elif method == "DELETE" and len(parts) == 3 and parts[1] == "transactions":
-                db.delete_transaction(int(parts[2]))
+                scope = parse_qs(parsed.query).get("scope", ["this"])[0]
+                db.delete_transaction(int(parts[2]), scope)
                 self._send(200, {"ok": True})
             elif method == "POST" and parsed.path == "/api/series":
                 payload["context"] = context

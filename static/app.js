@@ -659,17 +659,42 @@ function openTransaction(existing, preset) {
 async function removeTransaction(item) {
   if (!item) return;
   const label = item.description || item.category_name || labelDirection(item.direction);
-  const detail = item.loan_id
-    ? `${label} de ${formatDate(item.occurred_on)} sai dos totais e fica cancelada na evolução do empréstimo.`
-    : `${label} de ${formatDate(item.occurred_on)} sai da lista. Não dá para desfazer.`;
-  const accepted = await ask("Apagar lançamento", detail, "Apagar");
-  if (!accepted) return;
+  let scope = "this";
+  if (item.series_id && !item.loan_id) {
+    scope = await askSeriesDelete(item, label);
+    if (!scope) return;
+  } else {
+    const detail = item.loan_id
+      ? `${label} de ${formatDate(item.occurred_on)} sai dos totais e fica cancelada na evolução do empréstimo.`
+      : `${label} de ${formatDate(item.occurred_on)} sai da lista. Não dá para desfazer.`;
+    const accepted = await ask("Apagar lançamento", detail, "Apagar");
+    if (!accepted) return;
+  }
   try {
-    await api(`/api/transactions/${item.id}`, { method: "DELETE" });
+    await api(`/api/transactions/${item.id}?scope=${encodeURIComponent(scope)}`, { method: "DELETE" });
     closeModal();
     await refresh();
     render();
   } catch (error) { await notice(error.message); }
+}
+
+function askSeriesDelete(item, label) {
+  return new Promise((resolve) => {
+    const dialog = document.querySelector("#modal");
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      closeModal();
+      resolve(value);
+    };
+    dialog.innerHTML = `<form id="form"><h2>Apagar lançamento</h2><p class="lede">${escapeHtml(label)} de ${formatDate(item.occurred_on)} se repete. O que já foi efetivado continua. Não dá para desfazer.</p><label>Apagar<select name="scope"><option value="this" selected>Só este lançamento</option><option value="all">Este e os demais ainda não efetivados</option></select></label><div class="row"><button type="button" id="cancel" class="ghost">Cancelar</button><button class="danger" type="submit">Apagar</button></div></form>`;
+    dialog.showModal();
+    const form = dialog.querySelector("#form");
+    form.onsubmit = (event) => { event.preventDefault(); finish(form.scope.value); };
+    dialog.querySelector("#cancel").onclick = () => finish(null);
+    dialog.addEventListener("cancel", (event) => { event.preventDefault(); finish(null); }, { once: true });
+  });
 }
 
 function openAccount(existing) {

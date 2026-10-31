@@ -295,6 +295,41 @@ class RequirementTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             db.delete_category(self.expense["id"])
 
+    def test_series_delete_removes_unpaid_and_keeps_paid(self):
+        series = db.create_series({
+            "context": "pf", "direction": "saida", "account_id": self.account["id"],
+            "category_id": self.expense["id"], "amount": 10000, "day_of_month": 10,
+            "start_month": "2026-01", "month_count": 4, "description": "Aluguel",
+        })
+        paid_id = series["occurrences"][0]["id"]
+        db.update_transaction(paid_id, {"status": "efetivado"}, "this")
+        db.update_transaction(series["occurrences"][1]["id"], {
+            "amount": 8000, "account_id": self.account["id"], "category_id": self.expense["id"],
+        }, "this")
+        db.delete_transaction(series["occurrences"][2]["id"], "all")
+        kept = db.get_series(series["id"])
+        self.assertEqual(kept["active"], 0)
+        self.assertEqual(
+            [(item["occurred_on"], item["status"]) for item in kept["occurrences"]],
+            [("2026-01-10", "efetivado")],
+        )
+        self.assertEqual(db.get_transaction(paid_id)["amount"], 10000)
+        alone = db.create_series({
+            "context": "pf", "direction": "saida", "account_id": self.account["id"],
+            "category_id": self.expense["id"], "amount": 5000, "frequency": "month",
+            "start_on": "2026-03-10", "count": 3, "description": "Internet",
+        })
+        db.delete_transaction(alone["occurrences"][0]["id"], "this")
+        left = db.get_series(alone["id"])
+        self.assertEqual(left["active"], 1)
+        self.assertEqual(len(left["occurrences"]), 2)
+        db.delete_transaction(left["occurrences"][0]["id"], "all")
+        with self.assertRaises(ValueError):
+            db.get_series(alone["id"])
+        self.assertEqual(db.list_transactions("pf", "2026-03", direction="saida"), [])
+        with self.assertRaises(ValueError):
+            db.delete_transaction(paid_id, "ambos")
+
     def test_transaction_can_be_deleted(self):
         created = db.create_transaction({
             "context": "pf", "direction": "saida", "account_id": self.account["id"],

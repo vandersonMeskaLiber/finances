@@ -992,11 +992,35 @@ def cancel_transaction(transaction_id):
     return get_transaction(current["id"])
 
 
-def delete_transaction(transaction_id):
+def delete_transaction(transaction_id, scope="this"):
     current = get_transaction(transaction_id)
+    if scope not in ("this", "all"):
+        raise ValueError("Escolha apagar só este lançamento ou as ocorrências ainda não efetivadas.")
+    if scope == "all" and (not current.get("series_id") or current.get("loan_id")):
+        scope = "this"
     with connect() as conn:
         if current.get("loan_id"):
             conn.execute("UPDATE transactions SET status = 'cancelado' WHERE id = ?", (transaction_id,))
+            return
+        if scope == "all":
+            conn.execute(
+                """
+                DELETE FROM transactions
+                WHERE series_id = ? AND status != 'efetivado'
+                """,
+                (current["series_id"],),
+            )
+            remaining = conn.execute(
+                "SELECT COUNT(*) AS n FROM transactions WHERE series_id = ?",
+                (current["series_id"],),
+            ).fetchone()["n"]
+            if remaining:
+                conn.execute("UPDATE series SET active = 0 WHERE id = ?", (current["series_id"],))
+            else:
+                conn.execute(
+                    "DELETE FROM series WHERE id = ? AND loan_id IS NULL",
+                    (current["series_id"],),
+                )
             return
         conn.execute("DELETE FROM transactions WHERE id = ?", (transaction_id,))
 
