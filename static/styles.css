@@ -213,9 +213,8 @@ h2 { font-size: 22px; }
 .screen form > :where(p, .check, #preview) { grid-column: 1 / -1; }
 #preview:empty { display: none; }
 .screen > .row {
-  flex: none; margin-top: 4px; padding: 12px 0;
+  flex: none; margin-top: 4px; padding: 12px 0 4px;
   border-top: 1px solid var(--line); background: var(--cream); justify-content: flex-end;
-  position: sticky; bottom: 0; z-index: 2;
 }
 @container (min-width: 720px) {
   .screen:has(form label:nth-of-type(3)) > form { grid-template-columns: 1fr 1fr; }
@@ -254,7 +253,7 @@ input[type="checkbox"] { width: 18px; height: 18px; padding: 0; accent-color: va
 
 @media (min-width: 1180px) {
   .bento { grid-template-columns: minmax(200px, 1.25fr) repeat(3, minmax(0, 1fr)); }
-  .hero { grid-column: 1; grid-row: 1 / span 2; }
+  .hero { grid-column: 1; grid-row: 1 / span 2; justify-content: space-between; }
   .pending { grid-column: 2 / -1; grid-row: 2; }
 }
 
@@ -280,7 +279,8 @@ input[type="checkbox"] { width: 18px; height: 18px; padding: 0; accent-color: va
   .screen, .screen form, .screen > div:not(.row) { flex: none; overflow: visible; max-height: none; max-width: none; }
   .screen form, .screen > div:not(.row) { grid-template-columns: 1fr; }
   .screen h2 { font-size: 30px; position: static; }
-  .screen > .row { position: sticky; bottom: 0; }
+  .screen > .row { justify-content: stretch; }
+  .screen > .row .primary { margin-left: auto; }
   .columns { grid-template-columns: 1fr; }
   .top { align-items: stretch; flex-direction: column; gap: 12px; margin-bottom: 14px; }
   .top .row { width: 100%; flex-wrap: nowrap; }
