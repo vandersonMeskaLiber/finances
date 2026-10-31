@@ -172,7 +172,18 @@ h2 { font-size: 22px; }
 .checks { display: flex; gap: 18px; align-items: center; }
 .das-row { display: grid; grid-template-columns: 92px 1fr auto auto; gap: 12px; align-items: center; }
 
-dialog { width: min(560px, calc(100vw - 24px)); border: 0; border-radius: 20px; padding: 22px; background: var(--paper); }
+.screen {
+  display: flex; flex-direction: column; max-height: calc(100dvh - 56px); min-height: 0;
+}
+.screen h2 { font-size: 36px; line-height: 1.1; flex: none; margin-bottom: 16px; }
+.screen form, .screen > div:not(.row) { flex: 1; min-height: 0; overflow: auto; }
+.screen form { max-width: 640px; padding-right: 4px; }
+.screen > div:not(.row) { display: grid; gap: 12px; align-content: start; }
+.screen > .row {
+  flex: none; margin-top: 12px; padding-top: 12px;
+  border-top: 1px solid var(--line); background: var(--paper); justify-content: flex-end;
+}
+dialog { width: min(480px, calc(100vw - 24px)); max-height: calc(100vh - 32px); overflow: auto; border: 0; border-radius: 20px; padding: 22px; background: var(--paper); }
 dialog::backdrop { background: rgba(28, 25, 21, .45); }
 form, .fields { display: grid; gap: 12px; }
 dialog .row { justify-content: flex-end; margin-top: 4px; }
@@ -219,6 +230,8 @@ input[type="checkbox"] { width: 18px; height: 18px; padding: 0; accent-color: va
   .nav button { white-space: nowrap; height: 36px; }
   .sidebar .ghost { grid-area: logout; margin: 0; width: fit-content; justify-self: end; }
   main { padding: 16px 14px calc(28px + env(safe-area-inset-bottom)); }
+  .screen { max-height: calc(100dvh - 200px); }
+  .screen h2 { font-size: 30px; }
   .top { align-items: stretch; flex-direction: column; gap: 12px; margin-bottom: 14px; }
   .top .row { width: 100%; flex-wrap: nowrap; }
   .top .primary { padding: 0 12px; }

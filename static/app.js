@@ -849,7 +849,7 @@ async function removeLoan(loan) {
 function openLoan(loan) {
   const today = isoFromDate(new Date());
   const late = loan.rows.filter((row) => row.status === "previsto" && row.due_on < today).length;
-  modal(`<div><h2>${escapeHtml(loan.name)}</h2><p>Juros totais ${money(loan.total_interest)}. Saldo devedor ${money(loan.remaining)}.</p>${late ? `<p class="tag">${late} parcelas já venceram e ainda estão previstas.</p><button type="button" id="settle" class="primary">Marcar vencidas como pagas</button>` : ""}${loan.rows.map((row) => `<div class="item"><span>${formatDate(row.due_on)}</span><span>Juros ${money(row.interest)} · amortiza ${money(row.amortization)}</span><strong>${money(row.balance)} · ${row.status}</strong></div>`).join("")}<button type="button" id="cancel" class="ghost">Fechar</button></div>`);
+  modal(`<div><h2>${escapeHtml(loan.name)}</h2><p>Juros totais ${money(loan.total_interest)}. Saldo devedor ${money(loan.remaining)}.</p>${late ? `<p class="tag">${late} parcelas já venceram e ainda estão previstas.</p><button type="button" id="settle" class="primary">Marcar vencidas como pagas</button>` : ""}${loan.rows.map((row) => `<div class="item"><span>${formatDate(row.due_on)}</span><span>Juros ${money(row.interest)} · amortiza ${money(row.amortization)}</span><strong>${money(row.balance)} · ${row.status}</strong></div>`).join("")}<div class="row"><button type="button" id="cancel" class="ghost">Fechar</button></div></div>`);
   const settle = document.querySelector("#settle");
   if (settle) settle.onclick = async () => {
     const accepted = await ask("Marcar vencidas como pagas", "As parcelas com vencimento anterior a hoje passam para efetivado. O saldo acumulado da capa não muda, porque elas já entravam na conta.", "Marcar");
@@ -1003,11 +1003,23 @@ function monthName(month) {
 }
 
 function modal(html) {
-  const dialog = document.querySelector("#modal");
-  dialog.innerHTML = html;
-  if (!dialog.open) dialog.showModal();
-  const cancel = document.querySelector("#cancel");
-  if (cancel) cancel.onclick = closeModal;
+  const top = document.querySelector(".top");
+  if (top) top.hidden = true;
+  const view = document.querySelector("#view");
+  view.innerHTML = `<article class="screen">${html}</article>`;
+  const screen = view.querySelector(".screen");
+  const heading = screen.querySelector("h2");
+  if (heading && heading.parentElement !== screen) screen.insertBefore(heading, screen.firstChild);
+  const row = screen.querySelector(".row");
+  if (row) {
+    row.querySelectorAll("button").forEach((button) => {
+      if (button.getAttribute("type") !== "button") button.setAttribute("form", "form");
+    });
+    screen.appendChild(row);
+  }
+  window.scrollTo(0, 0);
+  const cancel = screen.querySelector("#cancel");
+  if (cancel) cancel.onclick = () => render();
 }
 
 function closeModal() { const dialog = document.querySelector("#modal"); if (dialog && dialog.open) dialog.close(); }
