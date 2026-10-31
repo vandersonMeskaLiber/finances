@@ -145,12 +145,43 @@ class RequirementTests(unittest.TestCase):
         db.delete_goal(goal["id"])
         self.assertEqual(db.list_goals("pf"), [])
 
+    def test_loan_uses_the_installment_informed(self):
+        loan = db.create_loan({
+            "context": "pf", "name": "Carro", "account_id": self.account["id"],
+            "category_id": self.expense["id"], "principal": 100000,
+            "installment": 40000, "term_months": 3, "first_due": "2026-11-10",
+        }, today=date(2026, 10, 31))
+        self.assertEqual([row["installment"] for row in loan["rows"]], [40000, 40000, 40000])
+        self.assertEqual(loan["total_interest"], 20000)
+        self.assertEqual(loan["rows"][-1]["balance"], 0)
+        self.assertEqual([row["status"] for row in loan["rows"]], ["previsto", "previsto", "previsto"])
+        self.assertEqual(loan["remaining"], 100000)
+        launched = [item for item in db.list_transactions("pf", "2026-11") if item["description"].startswith("Carro")]
+        self.assertEqual([item["amount"] for item in launched], [40000])
+        with self.assertRaises(ValueError):
+            db.create_loan({
+                "context": "pf", "name": "Curto", "account_id": self.account["id"],
+                "category_id": self.expense["id"], "principal": 100000,
+                "installment": 1000, "term_months": 3, "first_due": "2026-11-10",
+            })
+
+    def test_started_loan_marks_past_installments_paid(self):
+        loan = db.create_loan({
+            "context": "pf", "name": "Andamento", "account_id": self.account["id"],
+            "category_id": self.expense["id"], "principal": 100000,
+            "installment": 40000, "term_months": 3, "first_due": "2026-09-10",
+        }, today=date(2026, 10, 31))
+        self.assertEqual([row["status"] for row in loan["rows"]], ["efetivado", "efetivado", "previsto"])
+        self.assertEqual(loan["remaining"], loan["rows"][1]["balance"])
+        self.assertGreater(loan["remaining"], 0)
+        self.assertLess(loan["remaining"], loan["principal"])
+
     def test_deleting_loan_installment_does_not_reopen_the_debt(self):
         loan = db.create_loan({
             "context": "pf", "name": "Teste", "account_id": self.account["id"],
-            "category_id": self.expense["id"], "principal": 100000, "monthly_rate": "1,00",
-            "term_months": 3, "first_due": "2026-01-10", "system": "price", "already_paid": 1,
-        })
+            "category_id": self.expense["id"], "principal": 100000,
+            "installment": 40000, "term_months": 3, "first_due": "2026-01-10",
+        }, today=date(2026, 2, 15))
         paid = next(row for row in loan["rows"] if row["status"] == "efetivado")
         db.delete_transaction(paid["transaction_id"])
         again = db.get_loan(loan["id"])
@@ -161,10 +192,10 @@ class RequirementTests(unittest.TestCase):
     def test_loan_can_be_renamed_rebuilt_and_deleted(self):
         payload = {
             "context": "pf", "name": "Teste", "account_id": self.account["id"],
-            "category_id": self.expense["id"], "principal": 100000, "monthly_rate": "1,00",
-            "term_months": 3, "first_due": "2026-11-10", "system": "price", "already_paid": 0,
+            "category_id": self.expense["id"], "principal": 100000,
+            "installment": 120000, "term_months": 3, "first_due": "2026-11-10",
         }
-        loan = db.create_loan(payload)
+        loan = db.create_loan(payload, today=date(2026, 10, 31))
         renamed = db.update_loan(loan["id"], {**payload, "name": "Renomeado"})
         self.assertEqual(renamed["name"], "Renomeado")
         self.assertEqual(renamed["principal"], 100000)
@@ -172,10 +203,11 @@ class RequirementTests(unittest.TestCase):
         rebuilt = db.update_loan(loan["id"], {**payload, "name": "Renomeado", "principal": 200000, "term_months": 2})
         self.assertEqual(rebuilt["term_months"], 2)
         self.assertEqual(len(rebuilt["rows"]), 2)
-        paid = db.create_loan({**payload, "name": "Pago", "already_paid": 1, "first_due": "2026-01-10"})
+        self.assertTrue(all(row["installment"] == 120000 for row in rebuilt["rows"]))
+        paid = db.create_loan({**payload, "name": "Pago", "first_due": "2026-01-10"}, today=date(2026, 2, 15))
         with self.assertRaises(ValueError):
-            db.update_loan(paid["id"], {**payload, "name": "Pago", "already_paid": 1, "first_due": "2026-01-10", "principal": 50000})
-        kept = db.update_loan(paid["id"], {**payload, "name": "Pago novo", "already_paid": 1, "first_due": "2026-01-10"})
+            db.update_loan(paid["id"], {**payload, "name": "Pago", "first_due": "2026-01-10", "principal": 50000})
+        kept = db.update_loan(paid["id"], {**payload, "name": "Pago novo", "first_due": "2026-01-10"})
         self.assertEqual(kept["name"], "Pago novo")
         self.assertEqual(kept["principal"], 100000)
         db.delete_loan(loan["id"])
@@ -209,9 +241,9 @@ class RequirementTests(unittest.TestCase):
     def test_settle_marks_only_elapsed_installments(self):
         loan = db.create_loan({
             "context": "pf", "name": "Atraso", "account_id": self.account["id"],
-            "category_id": self.expense["id"], "principal": 300000, "monthly_rate": "0",
-            "term_months": 3, "first_due": "2026-09-10", "system": "price", "already_paid": 0,
-        })
+            "category_id": self.expense["id"], "principal": 300000,
+            "installment": 100000, "term_months": 3, "first_due": "2026-09-10",
+        }, today=date(2026, 9, 1))
         settled = db.settle_elapsed_installments(loan["id"], today=date(2026, 10, 24))
         statuses = [row["status"] for row in settled["rows"]]
         self.assertEqual(statuses, ["efetivado", "efetivado", "previsto"])

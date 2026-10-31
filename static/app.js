@@ -36,7 +36,7 @@ const ledes = {
   lancamentos: "Entrada, saída, investimento ou transferência entre contas suas.",
   investimentos: "O que saiu da conta para investir neste mês. Não é cotação e não soma o que já estava investido.",
   tipos: "Você nomeia os tipos. Subtipo é opcional.",
-  emprestimos: "Price ou SAC. Cada parcela vira uma saída no mês.",
+  emprestimos: "A parcela é o valor que você paga. O que já venceu entra como pago.",
   metas: "O quanto você guardou é informado na mão. O sistema não deduz sozinho.",
   empresa: "Acompanha o teto do MEI e o DAS. Não emite guia nem declaração.",
   usuarios: "Você administra o espaço e cria os demais acessos.",
@@ -283,12 +283,12 @@ function movementBits(day) {
 
 function renderContas() {
   const rows = state.accounts.map((account) => `
-    <div class="item">
+    <article class="record">
       <div class="who"><strong>${escapeHtml(account.name)}</strong><span class="tag">${account.active ? "Ativa" : "Desativada"}</span></div>
-      <div class="item-end"><span class="tag">Efetivado</span><strong class="money">${money(account.balance)}</strong></div>
+      <div class="record-balance"><span class="tag">Efetivado</span><strong class="money">${money(account.balance)}</strong></div>
       <div class="item-actions"><button type="button" class="ghost" data-account="${account.id}">Editar</button><button type="button" class="danger" data-del-account="${account.id}">Apagar</button></div>
-    </div>`).join("");
-  return `<article class="panel">${rows || empty("Nenhuma conta", "Crie a primeira com um nome livre. O saldo dela só conta o que já foi efetivado.")}</article>`;
+    </article>`).join("");
+  return `<article class="panel"><div class="records">${rows || empty("Nenhuma conta", "Crie a primeira com um nome livre. O saldo dela só conta o que já foi efetivado.")}</div></article>`;
 }
 
 function renderLancamentos() {
@@ -331,7 +331,7 @@ function renderInvestimentos() {
 }
 
 function renderTipos() {
-  return ["entrada", "saida"].map((direction) => {
+  return `<div class="columns">${["entrada", "saida"].map((direction) => {
     const categories = state.categories.filter((category) => category.direction === direction);
     return `<article class="panel"><div class="panel-head"><h2>${direction === "entrada" ? "Entradas" : "Saídas"}</h2></div>
     ${categories.map((category) => `
@@ -360,29 +360,29 @@ function renderTipos() {
         </div>
       </div>`).join("") || empty(direction === "entrada" ? "Nenhuma entrada" : "Nenhuma saída", "O tipo organiza o lançamento. Investimento e transferência não usam tipo.")}
     </article>`;
-  }).join("");
+  }).join("")}</div>`;
 }
 
 function renderEmprestimos() {
   const total = state.loans.reduce((sum, loan) => sum + loan.remaining, 0);
-  const rows = state.loans.map((loan) => `<div class="item">
+  const rows = state.loans.map((loan) => `<article class="record">
     <div class="who"><strong>${escapeHtml(loan.name)}</strong><span class="tag">${loan.term_months} meses · parcela ${money(loan.installment)}</span></div>
-    <span class="tag">Restam ${money(loan.remaining)}</span>
+    <div class="record-balance"><span class="tag">Restam</span><strong class="money">${money(loan.remaining)}</strong></div>
     <div class="item-actions">
       <button type="button" class="ghost" data-loan="${loan.id}">Ver evolução</button>
       <button type="button" class="ghost" data-loan-edit="${loan.id}">Editar</button>
       <button type="button" class="danger" data-del-loan="${loan.id}">Apagar</button>
     </div>
-  </div>`).join("");
+  </article>`).join("");
   return `<article class="panel">
     <div class="panel-head"><h2>Saldo devedor</h2><strong class="money">${money(total)}</strong></div>
-    ${rows || empty("Nenhum empréstimo", "Informe o valor tomado, a taxa e a parcela ou o prazo. A última parcela zera o saldo.")}
+    <div class="records">${rows || empty("Nenhum empréstimo", "Informe o valor tomado, o prazo e a parcela. As que já venceram entram como pagas.")}</div>
   </article>`;
 }
 
 function renderMetas() {
   const rows = state.goals.map((goal) => `
-    <div class="item">
+    <article class="record">
       <div class="who"><strong>${escapeHtml(goal.name)}</strong><span class="tag">Alvo ${money(goal.target_amount)} até ${formatDate(goal.target_date)}</span></div>
       <span class="tag">${goal.current ? `Neste mês, guardar ${money(goal.current.challenge)}` : ""}</span>
       <div class="item-actions">
@@ -390,8 +390,8 @@ function renderMetas() {
         <button type="button" class="ghost" data-goal-edit="${goal.id}">Editar</button>
         <button type="button" class="danger" data-del-goal="${goal.id}">Apagar</button>
       </div>
-    </div>`).join("");
-  return `<article class="panel">${rows || empty("Nenhuma meta", "Defina o alvo e a data. Se um mês ficar curto, o desafio dos meses seguintes sobe.")}</article>`;
+    </article>`).join("");
+  return `<article class="panel"><div class="records">${rows || empty("Nenhuma meta", "Defina o alvo e a data. Se um mês ficar curto, o desafio dos meses seguintes sobe.")}</div></article>`;
 }
 
 function renderEmpresa() {
@@ -403,7 +403,7 @@ function renderEmpresa() {
     above20: "Passou de 20% acima do teto. Até 20% há DAS complementar e a empresa vira microempresa no ano seguinte. Acima disso, o desenquadramento volta ao início do ano. Procure um contador. O sistema não calcula imposto de microempresa.",
   };
   const ratio = company.limit ? Math.min(100, Math.round((company.revenue / company.limit) * 100)) : 0;
-  return `<article class="panel">
+  return `<div class="columns"><article class="panel">
     ${company.alerts.map((alert) => `<p class="alert">${alerts[alert]}</p>`).join("")}
     <div class="meter">
       <div class="meter-top"><span>Faturamento no ano</span><strong>${money(company.revenue)} de ${money(company.limit)}</strong></div>
@@ -431,7 +431,7 @@ function renderEmpresa() {
     <div class="panel-head"><h2>DASN-SIMEI</h2></div>
     <p class="lede">A declaração de ${company.dasn_year} vence em ${formatDate(company.dasn_due)}, mesmo sem faturamento.</p>
     <div class="panel-head"><button type="button" class="${company.dasn_delivered ? "ghost" : "primary"}" id="dasn">${company.dasn_delivered ? "Entregue" : "Marcar como entregue"}</button></div>
-  </article>`;
+  </article></div>`;
 }
 
 function renderUsuarios() {
@@ -443,7 +443,7 @@ function renderUsuarios() {
       </div>
       <button type="button" class="ghost" id="export">Exportar dados</button>
     </div>
-    ${state.users.map((user) => `<div class="item">
+    <div class="records">${state.users.map((user) => `<article class="record">
       <div class="who"><strong>${escapeHtml(user.name)}</strong><span class="tag">${user.role === "admin" ? "Administrador" : "Usuário"} · ${escapeHtml(user.email)}</span></div>
       <span class="pill ${user.active ? "ok" : ""}">${user.active ? "Ativo" : "Desativado"}</span>
       <div class="item-actions">
@@ -451,7 +451,7 @@ function renderUsuarios() {
         <button type="button" class="ghost" data-user="${user.id}" data-active="${user.active ? "1" : "0"}">${user.active ? "Desativar" : "Ativar"}</button>
         <button type="button" class="danger" data-del-user="${user.id}">Apagar</button>
       </div>
-    </div>`).join("")}
+    </article>`).join("")}</div>
   </article>`;
 }
 
@@ -765,45 +765,61 @@ function openLoanForm(existing) {
   const locked = existing && existing.rows.some((row) => row.status !== "previsto");
   const lock = locked ? "disabled" : "";
   modal(`<form id="form"><h2>${existing ? "Editar empréstimo" : "Novo empréstimo"}</h2>
-    <label>Nome<input name="name" value="${existing ? escapeHtml(existing.name) : "Empréstimo"}"></label>
+    <label>Nome<input name="name" required value="${existing ? escapeHtml(existing.name) : ""}"></label>
     <label>Valor tomado<span class="reais"><span>R$</span><input name="principal" inputmode="numeric" autocomplete="off" placeholder="0,00" required ${lock} value="${existing ? formatReaisInput(existing.principal) : ""}"></span></label>
-    <label>Taxa mensal (%)<input name="monthly_rate" required placeholder="1,99" ${lock} value="${existing ? ratePercent(existing.monthly_rate) : ""}"></label>
-    <label>Prazo em meses<input name="term_months" placeholder="Deixe vazio se informar a parcela" ${lock} value="${existing ? existing.term_months : ""}"></label>
-    <label>Ou valor da parcela<span class="reais"><span>R$</span><input name="installment" inputmode="numeric" autocomplete="off" placeholder="0,00" ${lock}></span></label>
-    <label>Sistema<select name="system" ${lock}><option value="price" ${existing && existing.system === "price" ? "selected" : ""}>Tabela Price</option><option value="sac" ${existing && existing.system === "sac" ? "selected" : ""}>SAC</option></select></label>
-    <label>Primeira parcela<input type="date" name="first_due" required ${lock} value="${existing ? existing.first_due : new Date().toISOString().slice(0, 10)}"></label>
-    <label>Parcelas já pagas<input name="already_paid" ${lock} value="${existing ? existing.already_paid : 0}"></label>
-    <p class="tag" id="due-hint">${locked ? "Há parcela paga ou cancelada. Dá para mudar o nome, a conta e o tipo. Para mudar valor, taxa ou prazo, apague o contrato." : ""}</p>
+    <label>Prazo em meses<input name="term_months" inputmode="numeric" required ${lock} value="${existing ? existing.term_months : ""}"></label>
+    <label>Data da parcela<input type="date" name="first_due" required ${lock} value="${existing ? existing.first_due : isoFromDate(new Date())}"></label>
+    <label>Valor da parcela<span class="reais"><span>R$</span><input name="installment" inputmode="numeric" autocomplete="off" placeholder="0,00" required ${lock} value="${existing ? formatReaisInput(existing.installment) : ""}"></span></label>
+    <p class="tag" id="due-hint"></p>
     <label>Conta da parcela<select name="account_id">${options(accounts, existing && existing.account_id)}</select></label>
     <label>Tipo<select name="category_id">${saidas.map((category) => `<option value="${category.id}" ${existing && category.id === existing.category_id ? "selected" : ""}>${escapeHtml(category.name)}</option>`).join("")}</select></label>
     <p class="error" id="error" hidden></p>
-    <div id="preview"></div>
-    <div class="row"><button type="button" id="cancel" class="ghost">Cancelar</button>${existing ? `<button type="button" id="erase" class="danger">Apagar</button>` : ""}<button type="button" id="calc" class="ghost">Calcular</button><button class="primary">${existing ? "Salvar" : "Lançar contrato"}</button></div></form>`);
+    <div class="row"><button type="button" id="cancel" class="ghost">Cancelar</button>${existing ? `<button type="button" id="erase" class="danger">Apagar</button>` : ""}<button class="primary">Salvar</button></div></form>`);
   const form = document.querySelector("#form");
   bindReais(form.principal);
   bindReais(form.installment);
-  const showDue = () => {
-    const due = elapsedInstallments(form.first_due.value);
-    const word = due === 1 ? "venceu 1 parcela" : `venceram ${due} parcelas`;
-    document.querySelector("#due-hint").textContent = due ? `Desde essa data já ${word}. Informe quantas você já pagou.` : "";
+  const showHint = () => {
+    const hint = document.querySelector("#due-hint");
+    if (locked) {
+      hint.textContent = "Há parcela paga ou cancelada. Dá para mudar o nome, a conta e o tipo. Para mudar valor, prazo ou parcela, apague o contrato.";
+      return;
+    }
+    const principal = parseMoney(form.principal.value);
+    const installment = parseMoney(form.installment.value);
+    const term = Number(form.term_months.value);
+    if (!principal || !installment || !Number.isInteger(term) || term < 1) {
+      hint.textContent = "A mesma parcela se repete todo mês, a partir dessa data. As que já venceram entram como pagas.";
+      return;
+    }
+    const interest = installment * term - principal;
+    if (interest < 0) {
+      hint.textContent = "As parcelas não cobrem o valor tomado.";
+      return;
+    }
+    const due = Math.min(term, elapsedInstallments(form.first_due.value));
+    const paid = due === 1 ? " 1 já venceu e entra como paga." : due > 1 ? ` ${due} já venceram e entram como pagas.` : "";
+    const word = term === 1 ? "parcela" : "parcelas";
+    hint.textContent = `${term} ${word} de ${money(installment)}. Juros ${money(interest)}.${paid}`;
   };
-  form.first_due.onchange = showDue;
-  if (!locked) showDue();
-  const payload = () => ({
-    principal: parseMoney(form.principal.value), monthly_rate: form.monthly_rate.value, term_months: form.term_months.value || null,
-    installment: form.installment.value ? parseMoney(form.installment.value) : null, system: form.system.value, first_due: form.first_due.value,
-  });
-  document.querySelector("#calc").onclick = async () => {
-    try {
-      const result = await api("/api/loans/preview", { method: "POST", body: JSON.stringify(payload()) });
-      document.querySelector("#preview").innerHTML = `<p>${result.term_months} parcelas. Primeira ${money(result.installment)}. Juros ${money(result.total_interest)}. Saldo final ${money(result.leftover)}.</p>`;
-    } catch (error) { showError(error); }
-  };
+  form.principal.addEventListener("input", showHint);
+  form.installment.addEventListener("input", showHint);
+  form.term_months.addEventListener("input", showHint);
+  form.first_due.addEventListener("change", showHint);
+  showHint();
   const erase = document.querySelector("#erase");
   if (erase) erase.onclick = () => removeLoan(existing);
   form.onsubmit = async (event) => {
     event.preventDefault();
-    const body = { ...payload(), context: state.context, name: form.name.value, account_id: Number(form.account_id.value), category_id: Number(form.category_id.value), already_paid: Number(form.already_paid.value || 0) };
+    const body = {
+      context: state.context,
+      name: form.name.value,
+      principal: parseMoney(form.principal.value),
+      term_months: form.term_months.value,
+      first_due: form.first_due.value,
+      installment: parseMoney(form.installment.value),
+      account_id: Number(form.account_id.value),
+      category_id: Number(form.category_id.value),
+    };
     try {
       if (existing) await api(`/api/loans/${existing.id}`, { method: "PUT", body: JSON.stringify(body) });
       else await api("/api/loans", { method: "POST", body: JSON.stringify(body) });
@@ -1062,7 +1078,7 @@ function elapsedInstallments(firstDue) {
     const last = new Date(y, m, 0).getDate();
     const due = new Date(y, m - 1, Math.min(day, last));
     due.setHours(0, 0, 0, 0);
-    if (due > today) break;
+    if (due >= today) break;
     count += 1;
     m += 1;
     if (m > 12) { m = 1; y += 1; }
@@ -1089,10 +1105,6 @@ function openDasPayment(month) {
     const launch = form.launch.checked ? { account_id: Number(form.account_id.value), category_id: Number(form.category_id.value) } : null;
     try { await markDas(month, true, launch); } catch (error) { showError(error); }
   };
-}
-function ratePercent(stored) {
-  const text = (Number(stored) * 100).toFixed(4).replace(/\.?0+$/, "");
-  return text.replace(".", ",");
 }
 function formatReaisInput(raw) {
   const digits = String(raw ?? "").replace(/\D/g, "").replace(/^0+(?=\d)/, "");

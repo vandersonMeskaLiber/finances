@@ -1,6 +1,5 @@
 import calendar
 import hashlib
-import math
 import secrets
 import sqlite3
 from datetime import date, datetime, timedelta
@@ -1148,50 +1147,71 @@ def build_schedule(principal, monthly_rate, term, system, first_due):
     return rows
 
 
-def solve_term(principal, monthly_rate, installment):
+def clean_term(value):
+    if isinstance(value, bool) or value in ("", None):
+        raise ValueError("Informe o prazo em meses.")
+    if isinstance(value, float):
+        if not value.is_integer():
+            raise ValueError("Prazo inválido.")
+        value = int(value)
+    try:
+        term = int(str(value).strip())
+    except (TypeError, ValueError):
+        raise ValueError("Prazo inválido.") from None
+    if term < 1 or term > 480:
+        raise ValueError("Prazo inválido.")
+    return term
+
+
+def build_fixed_schedule(principal, installment, term, first_due):
     principal = clean_amount(principal)
     installment = clean_amount(installment)
-    rate = Decimal(str(monthly_rate))
-    if rate == 0:
-        return math.ceil(principal / installment)
-    interest = int((Decimal(principal) * rate).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
-    if installment <= interest:
-        raise ValueError("A parcela não cobre os juros do primeiro mês.")
-    n = -math.log(1 - float(Decimal(principal) * rate / Decimal(installment))) / math.log(float(1 + rate))
-    return max(1, math.ceil(n - 1e-9))
+    term = clean_term(term)
+    total_interest = installment * term - principal
+    if total_interest < 0:
+        raise ValueError("As parcelas não cobrem o valor tomado.")
+    first = date.fromisoformat(clean_date(first_due))
+    base, extra = divmod(total_interest, term)
+    rows = []
+    balance = principal
+    for number in range(1, term + 1):
+        interest = base + (1 if number <= extra else 0)
+        amortization = installment - interest
+        balance -= amortization
+        year, mon = shift_month(first.year, first.month, number - 1)
+        rows.append({
+            "number": number,
+            "due_on": occurrence_date(year, mon, first.day).isoformat(),
+            "installment": installment,
+            "interest": interest,
+            "amortization": amortization,
+            "balance": balance,
+        })
+    return rows
 
 
-def preview_loan(payload):
-    rate = Decimal(str(payload.get("monthly_rate")).replace(",", ".")) / Decimal(100)
-    system = payload.get("system") or "price"
-    principal = payload.get("principal")
-    if payload.get("term_months"):
-        term = int(payload["term_months"])
-    else:
-        term = solve_term(principal, rate, payload.get("installment"))
-    rows = build_schedule(principal, rate, term, system, payload.get("first_due"))
-    extras = int(payload.get("iof") or 0) + int(payload.get("fees") or 0) + int(payload.get("insurance") or 0)
-    total_paid = sum(row["installment"] for row in rows) + extras
+def preview_loan(payload, today=None):
+    term = clean_term(payload.get("term_months"))
+    rows = build_fixed_schedule(payload.get("principal"), payload.get("installment"), term, payload.get("first_due"))
+    limit = (today or date.today()).isoformat()
     return {
         "term_months": term,
         "installment": rows[0]["installment"],
         "last_installment": rows[-1]["installment"],
         "total_interest": sum(row["interest"] for row in rows),
-        "total_paid": total_paid,
+        "total_paid": sum(row["installment"] for row in rows),
         "leftover": rows[-1]["balance"],
         "rows": rows,
-        "cet_ready": extras > 0,
+        "already_paid": sum(1 for row in rows if row["due_on"] < limit),
+        "cet_ready": False,
     }
 
 
-def create_loan(payload):
+def create_loan(payload, today=None):
     context = ensure_context(payload.get("context"))
-    preview = preview_loan(payload)
-    name = clean_name(payload.get("name") or "Empréstimo", "Nome")
-    already = int(payload.get("already_paid") or 0)
-    if already < 0 or already > preview["term_months"]:
-        raise ValueError("A quantidade de parcelas já pagas é inválida.")
-    rate = str(Decimal(str(payload.get("monthly_rate")).replace(",", ".")) / Decimal(100))
+    preview = preview_loan(payload, today=today)
+    name = clean_name(payload.get("name"), "Nome")
+    already = preview["already_paid"]
     with connect() as conn:
         account = _account_in_context(conn, payload.get("account_id"), context)
         category_id, _ = _validate_category(conn, context, "saida", payload.get("category_id"), None)
@@ -1203,10 +1223,9 @@ def create_loan(payload):
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
             """,
             (
-                context, name, account["id"], category_id, clean_amount(payload.get("principal")), rate,
-                payload.get("system") or "price", preview["term_months"], preview["installment"],
-                clean_date(payload.get("first_due")), already, int(payload.get("iof") or 0),
-                int(payload.get("fees") or 0), int(payload.get("insurance") or 0), now(),
+                context, name, account["id"], category_id, clean_amount(payload.get("principal")), "0",
+                "fixo", preview["term_months"], preview["installment"],
+                clean_date(payload.get("first_due")), already, 0, 0, 0, now(),
             ),
         )
         loan_id = cur.lastrowid
@@ -1296,18 +1315,12 @@ def settle_elapsed_installments(loan_id, today=None):
     return get_loan(loan_id)
 
 
-def _loan_rate(payload):
-    return Decimal(str(payload.get("monthly_rate")).replace(",", ".")) / Decimal(100)
-
-
 def _loan_terms_match(current, payload, preview):
     return (
         clean_amount(payload.get("principal")) == current["principal"]
-        and _loan_rate(payload) == Decimal(str(current["monthly_rate"]))
-        and (payload.get("system") or "price") == current["system"]
         and preview["term_months"] == current["term_months"]
+        and preview["installment"] == current["installment"]
         and clean_date(payload.get("first_due")) == current["first_due"]
-        and int(payload.get("already_paid") or 0) == int(current["already_paid"])
     )
 
 
@@ -1363,22 +1376,14 @@ def update_loan(loan_id, payload):
     name = clean_name(payload.get("name") or current["name"], "Nome")
     preview = preview_loan({
         "principal": payload.get("principal", current["principal"]),
-        "monthly_rate": payload.get("monthly_rate"),
-        "system": payload.get("system") or current["system"],
         "term_months": payload.get("term_months") or current["term_months"],
-        "installment": payload.get("installment"),
+        "installment": payload.get("installment", current["installment"]),
         "first_due": payload.get("first_due") or current["first_due"],
-        "iof": current["iof"],
-        "fees": current["fees"],
-        "insurance": current["insurance"],
     })
-    already = int(payload.get("already_paid") or 0)
-    if already < 0 or already > preview["term_months"]:
-        raise ValueError("A quantidade de parcelas já pagas é inválida.")
     same_terms = _loan_terms_match(current, payload, preview)
     history = any(row["status"] != "previsto" for row in current["rows"])
     if not same_terms and history:
-        raise ValueError("Já há parcela paga ou cancelada. Dá para mudar o nome, a conta e o tipo. Para mudar valor, taxa ou prazo, apague o contrato e lance de novo.")
+        raise ValueError("Já há parcela paga ou cancelada. Dá para mudar o nome, a conta e o tipo. Para mudar valor, prazo ou parcela, apague o contrato e lance de novo.")
     with connect() as conn:
         account = _account_in_context(conn, payload.get("account_id") or current["account_id"], context)
         category_id, _ = _validate_category(conn, context, "saida", payload.get("category_id") or current["category_id"], None)
@@ -1400,7 +1405,6 @@ def update_loan(loan_id, payload):
                 (account["id"], category_id, name, current["term_months"], loan_id),
             )
         else:
-            rate = str(_loan_rate(payload))
             conn.execute(
                 """
                 UPDATE loans
@@ -1409,13 +1413,13 @@ def update_loan(loan_id, payload):
                 WHERE id = ?
                 """,
                 (
-                    name, account["id"], category_id, clean_amount(payload.get("principal")), rate,
-                    payload.get("system") or "price", preview["term_months"], preview["installment"],
-                    clean_date(payload.get("first_due")), already, loan_id,
+                    name, account["id"], category_id, clean_amount(payload.get("principal")), "0",
+                    "fixo", preview["term_months"], preview["installment"],
+                    clean_date(payload.get("first_due")), preview["already_paid"], loan_id,
                 ),
             )
             _clear_loan_children(conn, loan_id, current["series_id"])
-            _insert_loan_schedule(conn, loan_id, context, name, account["id"], category_id, preview, already)
+            _insert_loan_schedule(conn, loan_id, context, name, account["id"], category_id, preview, preview["already_paid"])
     return get_loan(loan_id)
 
 

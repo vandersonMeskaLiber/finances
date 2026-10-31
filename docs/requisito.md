@@ -23,7 +23,7 @@ Estes pontos vieram de produtos e métodos que já resolvem partes do que você 
 - **Conta não mensal vira reserva mensal.** A segunda regra do YNAB divide uma despesa anual por 12. Isso alimenta metas: o sistema diz quanto guardar por mês para chegar na data.
 - **Atraso de meta se corrige nos meses seguintes.** Se o mês ficou abaixo, o valor que falta se redistribui no prazo que resta. A meta final continua a mesma. É o mesmo raciocínio de um fundo de reserva com data.
 - **Recorrência com duas edições.** Você pediu alterar só aquele mês ou alterar todas. O requisito segue isso. Ocorrência já paga não muda junto com a série, para o mês fechado não ser reescrito.
-- **Empréstimo pessoal e consignado no Brasil usam Tabela Price.** A parcela é fixa. O SAC fica disponível porque a parcela cai e o juros total é menor, mas não é o padrão desses contratos. O sistema calcula a parcela, o juros, a amortização e o saldo devedor mês a mês. A taxa do contrato entra no cálculo. IOF, tarifa e seguro só entram se a pessoa informar, porque não estão na taxa mensal.
+- **A parcela do empréstimo é o valor que a pessoa paga.** Tabela Price e SAC não entram no cadastro: a parcela calculada pela taxa quase nunca fecha com o boleto. A pessoa informa valor tomado, prazo, data e valor da parcela. O juros é a diferença entre o total das parcelas e o valor tomado. Parcela já vencida entra como paga, para servir tanto a um contrato novo quanto a um que já está em andamento.
 - **MEI em 2026.** O teto vigente é R$ 81.000,00 por ano. No ano de abertura, o teto é proporcional: R$ 6.750,00 por mês de atividade, contando o mês da abertura inteiro. Até 20% acima (R$ 97.200,00) há DAS complementar e a empresa vira microempresa no ano seguinte. Acima de 20%, o desenquadramento volta ao início do ano. O DAS vence no dia 20. Em 2026 o INSS do DAS é R$ 81,05, mais R$ 1,00 de ICMS e/ou R$ 5,00 de ISS. MEI transportador de cargas tem teto de R$ 251.600,00 e INSS de R$ 194,52. A DASN-SIMEI do ano anterior vence em 31 de maio. O Finances acompanha e alerta. Não emite guia e não entrega declaração.
 - **Instalável agora, loja depois.** Chrome, Edge e Firefox instalam o sistema quando ele é servido em HTTPS, tem manifesto com nome, ícones de 192 e 512 pixels, `start_url` e `display` standalone. A Play Store aceita esse app embrulhado como Trusted Web Activity. A App Store não aceita um site reempacotado: o app precisa se comportar como aplicativo. Por isso nenhuma função pode depender de mouse, hover ou tela larga.
 
@@ -159,31 +159,23 @@ RF-SIT-04. Uma ocorrência pode ser cancelada. Cancelado sai dos totais e do pan
 
 RF-EMP-01. Um empréstimo é um contrato de um contexto, ligado à conta de onde a parcela sai. Dívida em dois lugares são dois contratos. A tela de empréstimos soma os contratos.
 
-RF-EMP-02. Para chegar na parcela e na evolução, o contrato guarda:
+RF-EMP-02. O cadastro pede só: nome, valor tomado, prazo em meses, data da parcela, valor da parcela, conta da parcela e tipo.
 
-- valor tomado;
-- taxa de juros mensal;
-- prazo em meses ou valor da parcela, quando um dos dois for o dado que a pessoa tem;
-- sistema: Tabela Price, como padrão, ou SAC;
-- data da primeira parcela;
-- quantas parcelas já foram pagas, se o contrato começou antes de entrar no sistema;
-- conta de onde a parcela sai.
+RF-EMP-03. Cada parcela lançada é exatamente o valor informado, em todos os meses. O sistema não recalcula essa parcela.
 
-RF-EMP-03. Na Tabela Price a parcela é fixa: valor vezes a taxa mensal, dividido por um menos (1 mais a taxa) elevado a menos o número de meses. Em cada mês, o juros é o saldo devedor vezes a taxa, e o resto da parcela amortiza.
+RF-EMP-04. O juros do contrato é o total das parcelas menos o valor tomado. Esse juros se reparte entre os meses. A última parcela deixa o saldo devedor em zero.
 
-RF-EMP-04. No SAC a amortização mensal é o valor tomado dividido pelo número de meses. A parcela do mês é essa amortização mais o juros do saldo. A parcela diminui.
+RF-EMP-05. Se o total das parcelas for menor que o valor tomado, o contrato não é lançado.
 
-RF-EMP-05. Se a pessoa informar valor, taxa e parcela, o sistema calcula o prazo e mostra o saldo que sobra na última parcela por causa do arredondamento de centavos.
+RF-EMP-06. Parcela com vencimento anterior a hoje entra como paga. Parcela de hoje em diante entra como prevista. Um contrato novo e um que já está sendo pago usam o mesmo cadastro: a data da primeira parcela é que muda.
 
-RF-EMP-06. Se a pessoa informar valor, taxa e prazo, o sistema calcula a parcela.
+RF-EMP-07. A evolução mostra, mês a mês, a parcela, o juros, a amortização e o saldo devedor, além do total de juros.
 
-RF-EMP-07. O resultado mostra, mês a mês: parcela, juros, amortização e saldo devedor. Mostra também o total de juros e o total a pagar.
+RF-EMP-08. O contrato gera as parcelas como saídas da série, na conta escolhida, no tipo que a pessoa indicar. Pagar a parcela no lançamento atualiza a evolução do contrato.
 
-RF-EMP-08. O contrato gera as parcelas como saídas previstas da série, na conta escolhida, no tipo que a pessoa indicar. Pagar a parcela no lançamento atualiza a evolução do contrato.
+RF-EMP-09. Com parcela já paga ou cancelada, dá para mudar o nome, a conta e o tipo. Valor, prazo, data e parcela só mudam se o contrato for apagado e lançado de novo.
 
-RF-EMP-09. Quitar, antecipar ou mudar taxa, prazo ou parcela recalcula o que ainda não foi pago e pergunta se a série futura deve ser atualizada. Parcelas já pagas ficam no histórico com o valor pago.
-
-RF-EMP-10. IOF, tarifa e seguro não são inventados pela taxa. Se a pessoa informar esses valores, eles entram no total do contrato e podem virar saída à parte. O custo efetivo total só é exibido quando esses valores existem.
+RF-EMP-10. Antes de salvar, o cadastro mostra quantas parcelas serão lançadas, o juros e quantas já entram como pagas.
 
 ## 10. Metas e desafios
 
@@ -291,7 +283,7 @@ Estes são os conceitos, não o desenho do banco.
 - **Capa.** No dia 1 estão visíveis o saldo (entradas − saídas − investimentos), as entradas, as saídas, as pendências e os investimentos, além de todos os dias do mês. Dá para apontar o saldo do último dia.
 - **Dinheiro.** Uma saída sem conta não é salva. A conta pode se chamar "Carteira" sem estar ligada a um banco. O detalhe de uma entrada mostra a conta.
 - **Série.** Uma parcela de 5 meses gera 5 previstos. Alterar só um não muda os outros. Alterar todas não muda o que já foi pago.
-- **Empréstimo.** Valor, taxa mensal e prazo produzem a parcela Price e a tabela até o saldo zerar. Pagar uma parcela reduz o saldo devedor.
+- **Empréstimo.** Valor tomado, prazo e parcela informada geram saídas desse valor até o saldo zerar. Parcela já vencida entra paga. Pagar uma parcela reduz o saldo devedor.
 - **Meta.** Com alvo e data, o sistema diz o valor do mês. A pessoa informa quanto guardou. Um mês abaixo aumenta o desafio dos meses seguintes e mantém o alvo.
 - **Empresa.** O faturamento do ano comparado ao teto de R$ 81.000,00 dispara os três alertas nos pontos certos. O DAS de um mês pode ser marcado como pago.
 - **Acesso.** Sem login a capa não abre. Usuário de um espaço não vê outro espaço.
@@ -321,5 +313,5 @@ Confirmadas em 18 de outubro de 2026:
 5. O número grande da capa carrega o saldo ou o déficit dos meses anteriores. A frase abaixo é só o que este mês gerou: entradas − saídas − investimentos. Ao lado entram entradas, saídas, pendências e investimentos. O saldo de cada conta bancária conta só o efetivado.
 6. Na meta, você informa quanto guardou. O sistema não calcula isso sozinho.
 7. Repetição todo mês, toda semana ou todo dia.
-8. Empréstimo em Tabela Price por padrão, um contrato por conta.
+8. Empréstimo pela parcela informada, sem taxa. Um contrato por conta. Parcela vencida entra como paga.
 9. Empresa só no contexto de pessoa jurídica, como acompanhamento, sem emitir guia.
