@@ -195,6 +195,7 @@ def init_db():
             conn.execute("ALTER TABLE series ADD COLUMN frequency TEXT NOT NULL DEFAULT 'month'")
         if "start_on" not in series_columns:
             conn.execute("ALTER TABLE series ADD COLUMN start_on TEXT")
+        sync_loan_rows(conn)
 
 
 def now():
@@ -1187,6 +1188,38 @@ def clean_term(value):
     return term
 
 
+def implied_monthly_rate(principal, installment, term):
+    principal = Decimal(int(principal))
+    installment = Decimal(int(installment))
+    term = int(term)
+    if installment * term <= principal:
+        return Decimal(0)
+    rate = (installment * term - principal) / (principal * term)
+    one = Decimal(1)
+    for _ in range(80):
+        compound = (one + rate) ** term
+        present = installment * (one - one / compound) / rate
+        inverse = one / compound
+        slope = installment * (term * inverse / (one + rate) * rate - (one - inverse)) / (rate * rate)
+        if slope == 0:
+            break
+        nxt = rate - (present - principal) / slope
+        if nxt <= 0:
+            nxt = rate / 2
+        if abs(nxt - rate) <= Decimal("1e-18"):
+            rate = nxt
+            break
+        rate = nxt
+    return rate if rate > 0 else Decimal(0)
+
+
+def format_rate(rate):
+    if rate <= 0:
+        return "0"
+    text = format(rate.quantize(Decimal("0.000000000001")), "f")
+    return text.rstrip("0").rstrip(".") or "0"
+
+
 def build_fixed_schedule(principal, installment, term, first_due):
     principal = clean_amount(principal)
     installment = clean_amount(installment)
@@ -1194,13 +1227,25 @@ def build_fixed_schedule(principal, installment, term, first_due):
     total_interest = installment * term - principal
     if total_interest < 0:
         raise ValueError("As parcelas não cobrem o valor tomado.")
+    rate = implied_monthly_rate(principal, installment, term)
     first = date.fromisoformat(clean_date(first_due))
-    base, extra = divmod(total_interest, term)
     rows = []
     balance = principal
-    for number in range(1, term + 1):
-        interest = base + (1 if number <= extra else 0)
+    for number in range(1, term):
+        raw = Decimal(balance) * rate
+        interest = int(raw.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+        if interest < 0:
+            interest = 0
+        if interest > installment:
+            interest = installment
+        # O arredondamento pode comer a amortização inteira mesmo com o juro
+        # ainda menor que a parcela. Sem esse centavo o saldo não anda.
+        if interest == installment and raw < Decimal(installment) and balance > 0:
+            interest = installment - 1
         amortization = installment - interest
+        if amortization > balance:
+            amortization = balance
+            interest = installment - amortization
         balance -= amortization
         year, mon = shift_month(first.year, first.month, number - 1)
         rows.append({
@@ -1211,7 +1256,49 @@ def build_fixed_schedule(principal, installment, term, first_due):
             "amortization": amortization,
             "balance": balance,
         })
+    if balance > installment:
+        gap = balance - installment
+        for row in reversed(rows):
+            move = min(row["interest"], gap)
+            if move:
+                row["interest"] -= move
+                row["amortization"] += move
+                gap -= move
+            if gap == 0:
+                break
+        if gap:
+            raise ValueError("As parcelas não cobrem o valor tomado.")
+        balance = principal
+        for row in rows:
+            balance -= row["amortization"]
+            row["balance"] = balance
+    year, mon = shift_month(first.year, first.month, term - 1)
+    amortization = balance
+    interest = installment - amortization
+    if interest < 0 or amortization < 0:
+        raise ValueError("As parcelas não cobrem o valor tomado.")
+    rows.append({
+        "number": term,
+        "due_on": occurrence_date(year, mon, first.day).isoformat(),
+        "installment": installment,
+        "interest": interest,
+        "amortization": amortization,
+        "balance": 0,
+    })
     return rows
+
+
+def sync_loan_rows(conn):
+    loans = conn.execute("SELECT id, principal, installment, term_months, first_due FROM loans").fetchall()
+    for loan in loans:
+        rate = format_rate(implied_monthly_rate(loan["principal"], loan["installment"], loan["term_months"]))
+        rows = build_fixed_schedule(loan["principal"], loan["installment"], loan["term_months"], loan["first_due"])
+        conn.execute("UPDATE loans SET monthly_rate = ? WHERE id = ?", (rate, loan["id"]))
+        for row in rows:
+            conn.execute(
+                "UPDATE loan_rows SET interest = ?, amortization = ?, balance = ? WHERE loan_id = ? AND number = ?",
+                (row["interest"], row["amortization"], row["balance"], loan["id"], row["number"]),
+            )
 
 
 def preview_loan(payload, today=None):
@@ -1247,7 +1334,8 @@ def create_loan(payload, today=None):
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
             """,
             (
-                context, name, account["id"], category_id, clean_amount(payload.get("principal")), "0",
+                context, name, account["id"], category_id, clean_amount(payload.get("principal")),
+                format_rate(implied_monthly_rate(clean_amount(payload.get("principal")), preview["installment"], preview["term_months"])),
                 "fixo", preview["term_months"], preview["installment"],
                 clean_date(payload.get("first_due")), already, 0, 0, 0, now(),
             ),
@@ -1437,7 +1525,8 @@ def update_loan(loan_id, payload):
                 WHERE id = ?
                 """,
                 (
-                    name, account["id"], category_id, clean_amount(payload.get("principal")), "0",
+                    name, account["id"], category_id, clean_amount(payload.get("principal")),
+                    format_rate(implied_monthly_rate(clean_amount(payload.get("principal")), preview["installment"], preview["term_months"])),
                     "fixo", preview["term_months"], preview["installment"],
                     clean_date(payload.get("first_due")), preview["already_paid"], loan_id,
                 ),

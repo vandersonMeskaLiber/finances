@@ -165,6 +165,26 @@ class RequirementTests(unittest.TestCase):
                 "installment": 1000, "term_months": 3, "first_due": "2026-11-10",
             })
 
+    def test_financing_interest_falls_on_the_outstanding_balance(self):
+        loan = db.create_loan({
+            "context": "pf", "name": "Financiamento Carro", "account_id": self.account["id"],
+            "category_id": self.expense["id"], "principal": 4_116_590,
+            "installment": 128_632, "term_months": 48, "first_due": "2025-06-09",
+        }, today=date(2026, 10, 31))
+        self.assertEqual([row["installment"] for row in loan["rows"]], [128_632] * 48)
+        self.assertEqual(loan["rows"][-1]["balance"], 0)
+        self.assertEqual(loan["total_interest"], 128_632 * 48 - 4_116_590)
+        self.assertGreater(loan["rows"][0]["interest"], loan["rows"][-1]["interest"])
+        self.assertTrue(all(row["interest"] >= 0 and row["amortization"] > 0 for row in loan["rows"]))
+        self.assertEqual(sum(row["interest"] for row in loan["rows"]), loan["total_interest"])
+        self.assertEqual(sum(1 for row in loan["rows"] if row["status"] == "efetivado"), 17)
+        self.assertEqual(loan["remaining"], loan["rows"][16]["balance"])
+        self.assertGreater(loan["remaining"], 3_000_000)
+        self.assertLess(loan["remaining"], 3_100_000)
+        self.assertEqual(f"{Decimal(loan['monthly_rate']) * 100:.2f}", "1.79")
+        paid = [row for row in loan["rows"] if row["status"] == "efetivado"]
+        self.assertEqual(paid[-1]["due_on"], "2026-10-09")
+
     def test_started_loan_marks_past_installments_paid(self):
         loan = db.create_loan({
             "context": "pf", "name": "Andamento", "account_id": self.account["id"],
