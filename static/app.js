@@ -688,11 +688,12 @@ function askSeriesDelete(item, label) {
       closeModal();
       resolve(value);
     };
-    dialog.innerHTML = `<form id="form"><h2>Apagar lançamento</h2><p class="lede">${escapeHtml(label)} de ${formatDate(item.occurred_on)} se repete. O que já foi efetivado continua. Não dá para desfazer.</p><label>Apagar<select name="scope"><option value="this" selected>Só este lançamento</option><option value="all">Este e os demais ainda não efetivados</option></select></label><div class="row"><button type="button" id="cancel" class="ghost">Cancelar</button><button class="danger" type="submit">Apagar</button></div></form>`;
+    dialog.innerHTML = `<form id="series-delete"><h2>Apagar repetição</h2><p class="lede">${escapeHtml(label)} de ${formatDate(item.occurred_on)} se repete. Os meses já efetivados continuam. Não dá para desfazer.</p><div class="row"><button type="button" id="cancel" class="ghost">Cancelar</button><button type="button" id="only-this" class="ghost">Só este mês</button><button type="button" id="all-open" class="danger">Apagar os outros meses</button></div></form>`;
+    if (dialog.open) dialog.close();
     dialog.showModal();
-    const form = dialog.querySelector("#form");
-    form.onsubmit = (event) => { event.preventDefault(); finish(form.scope.value); };
     dialog.querySelector("#cancel").onclick = () => finish(null);
+    dialog.querySelector("#only-this").onclick = () => finish("this");
+    dialog.querySelector("#all-open").onclick = () => finish("all");
     dialog.addEventListener("cancel", (event) => { event.preventDefault(); finish(null); }, { once: true });
   });
 }

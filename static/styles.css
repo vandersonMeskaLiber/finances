@@ -285,6 +285,8 @@ input[type="checkbox"] { width: 18px; height: 18px; padding: 0; accent-color: va
   .top { align-items: stretch; flex-direction: column; gap: 12px; margin-bottom: 14px; }
   .top .row { width: 100%; flex-wrap: nowrap; }
   .top .primary { padding: 0 12px; }
+  dialog .row { flex-direction: column-reverse; align-items: stretch; }
+  dialog .row button { width: 100%; }
   .month { flex: 0 1 auto; }
   .month strong, .month .text-btn { min-width: 0; white-space: nowrap; font-size: 13px; }
   .nowrap { white-space: nowrap; }
