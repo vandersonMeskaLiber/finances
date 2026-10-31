@@ -1553,24 +1553,11 @@ def list_goals(context, today=None):
     return [get_goal(goal_id, today) for goal_id in ids]
 
 
-def panorama(context, month, today=None, extras=None, omit_ids=None):
+def panorama(context, month, today=None):
     ensure_context(context)
     today = today or date.today()
     start, end = month_bounds(month)
-    items = list_transactions(context, month)
-    items = [item for item in items if item["status"] != "cancelado" and item["id"] not in (omit_ids or set())]
-    for extra in extras or []:
-        items.append({
-            "id": None,
-            "direction": extra["direction"],
-            "amount": clean_amount(extra["amount"]),
-            "occurred_on": occurrence_date(start.year, start.month, int(extra["day"])).isoformat(),
-            "status": "previsto",
-            "description": extra.get("description") or "Simulação",
-            "account_name": extra.get("account_name") or "Simulação",
-            "category_name": None,
-            "hypothetical": True,
-        })
+    items = [item for item in list_transactions(context, month) if item["status"] != "cancelado"]
     cards = {"entrada": 0, "saida": 0, "investimento": 0}
     pending = {"entrada": 0, "saida": 0, "investimento": 0}
     by_account = []
@@ -1615,7 +1602,6 @@ def panorama(context, month, today=None, extras=None, omit_ids=None):
                 "account_name": item.get("account_name"),
                 "status": item["status"],
                 "late": item.get("late", False),
-                "hypothetical": item.get("hypothetical", False),
             } for item in day_items],
         })
         cursor = date.fromordinal(cursor.toordinal() + 1)

@@ -10,7 +10,7 @@ A linha adotada abaixo já incorpora o que você pediu e o que sistemas parecido
 
 O Finances é um sistema de gestão financeira para a pessoa usar no navegador do computador, do celular e do tablet, e também instalar pelo próprio Chrome. A mesma base precisa caber, mais adiante, na App Store e na Play Store.
 
-A pessoa enxerga o mês inteiro sem procurar: o saldo do mês, quanto entra, quanto sai, o que ainda está pendente e quanto foi investido. Cada lançamento diz em qual conta o dinheiro sai ou entra. A conta é um nome que a pessoa cria. Pode ser um banco, uma carteira, um cofre ou qualquer outro lugar. Não precisa ser uma instituição financeira. Dá para repetir contas fixas, acompanhar empréstimo, perseguir uma meta, simular uma decisão e, no contexto de pessoa jurídica, saber se o MEI está dentro do limite e se o imposto do mês foi pago.
+A pessoa enxerga o mês inteiro sem procurar: o saldo do mês, quanto entra, quanto sai, o que ainda está pendente e quanto foi investido. Cada lançamento diz em qual conta o dinheiro sai ou entra. A conta é um nome que a pessoa cria. Pode ser um banco, uma carteira, um cofre ou qualquer outro lugar. Não precisa ser uma instituição financeira. Dá para repetir contas fixas, acompanhar empréstimo, perseguir uma meta e, no contexto de pessoa jurídica, saber se o MEI está dentro do limite e se o imposto do mês foi pago.
 
 Dois contextos convivem no mesmo login: pessoa física e pessoa jurídica. A estrutura é a mesma. Os dados não se misturam.
 
@@ -27,12 +27,12 @@ Estes pontos vieram de produtos e métodos que já resolvem partes do que você 
 - **MEI em 2026.** O teto vigente é R$ 81.000,00 por ano. No ano de abertura, o teto é proporcional: R$ 6.750,00 por mês de atividade, contando o mês da abertura inteiro. Até 20% acima (R$ 97.200,00) há DAS complementar e a empresa vira microempresa no ano seguinte. Acima de 20%, o desenquadramento volta ao início do ano. O DAS vence no dia 20. Em 2026 o INSS do DAS é R$ 81,05, mais R$ 1,00 de ICMS e/ou R$ 5,00 de ISS. MEI transportador de cargas tem teto de R$ 251.600,00 e INSS de R$ 194,52. A DASN-SIMEI do ano anterior vence em 31 de maio. O Finances acompanha e alerta. Não emite guia e não entrega declaração.
 - **Instalável agora, loja depois.** Chrome, Edge e Firefox instalam o sistema quando ele é servido em HTTPS, tem manifesto com nome, ícones de 192 e 512 pixels, `start_url` e `display` standalone. A Play Store aceita esse app embrulhado como Trusted Web Activity. A App Store não aceita um site reempacotado: o app precisa se comportar como aplicativo. Por isso nenhuma função pode depender de mouse, hover ou tela larga.
 
-Fontes usadas na seção 18.
+Fontes usadas na seção 17.
 
 ## 3. Atores
 
 - **Administrador.** É você. Cria e desativa os logins, redefine acesso e altera as configurações do espaço, inclusive os contextos de pessoa física e pessoa jurídica.
-- **Usuário.** É cada pessoa cujo login você criou. Lança, consulta, simula e acompanha metas dentro dos contextos que você liberou.
+- **Usuário.** É cada pessoa cujo login você criou. Lança, consulta e acompanha metas dentro dos contextos que você liberou.
 
 A primeira versão tem um espaço. Você é o administrador. Os demais entram com os logins que você criar. Os dados desse espaço nascem isolados de qualquer outro espaço. Cobrança, plano e vitrine ficam fora deste requisito. O isolamento existe desde já para o produto poder ser vendido sem misturar clientes.
 
@@ -42,7 +42,7 @@ RF-CTX-01. No mesmo login a pessoa escolhe separar pessoa física e pessoa jurí
 
 RF-CTX-02. Com a separação ligada, o sistema mostra um alternador sempre visível. A troca de contexto é imediata.
 
-RF-CTX-03. Contas, lançamentos, tipos, metas, empréstimos, simulações e o resumo do mês pertencem a um contexto. Uma consulta de um contexto não lê o outro.
+RF-CTX-03. Contas, lançamentos, tipos, metas, empréstimos e o resumo do mês pertencem a um contexto. Uma consulta de um contexto não lê o outro.
 
 RF-CTX-04. A estrutura das telas é a mesma nos dois contextos. Muda o conjunto de dados.
 
@@ -203,26 +203,7 @@ RF-MET-07. A pessoa pode mudar o alvo ou a data. O histórico dos meses já ence
 
 RF-MET-08. Meta concluída mostra o total guardado e quantos meses bateram.
 
-## 11. Simulação
-
-RF-SIM-01. A simulação ajuda a decidir sem gravar lançamento.
-
-RF-SIM-02. A base da simulação é o panorama do mês escolhido, com as contas fixas e as parcelas já existentes, mais o valor que a pessoa diz que consegue economizar.
-
-RF-SIM-03. A pessoa pode testar, juntos ou separados:
-
-- uma parcela nova, com valor e dia;
-- um empréstimo novo, com valor, taxa, prazo ou parcela, e ver a parcela calculada entrar no mês;
-- tirar ou reduzir um gasto recorrente;
-- incluir ou reduzir uma entrada.
-
-RF-SIM-04. O resultado mostra o panorama dia a dia com a hipótese, o saldo do último dia e se algum dia fica negativo.
-
-RF-SIM-05. O resultado também mostra a parcela nova ao lado do que sobra no mês depois das saídas já comprometidas.
-
-RF-SIM-06. A simulação some quando a pessoa sai dela, a menos que ela peça para transformar a hipótese em lançamento ou em empréstimo de verdade. Essa transformação passa pelas mesmas regras de lançamento e de empréstimo.
-
-## 12. Empresa
+## 11. Empresa
 
 A área Empresa fica dentro do contexto de pessoa jurídica. Não há login, entrada nem tipo de usuário próprio para ela.
 
@@ -248,7 +229,7 @@ RF-EMPR-08. DASN-SIMEI: lembrete de que a declaração do ano anterior vence em 
 
 RF-EMPR-09. Nada nesta área emite boleto, nota ou guia, e nada substitui o Portal do Simples Nacional.
 
-## 13. Segurança e comercialização
+## 12. Segurança e comercialização
 
 RF-SEG-01. Sem login não há dado. Toda tela pede sessão válida.
 
@@ -264,7 +245,7 @@ RF-SEG-06. A pessoa pode exportar os dados do próprio espaço e pode pedir a ex
 
 RF-SEG-07. Cobrança, nota fiscal do próprio produto e página de planos ficam fora deste requisito.
 
-## 14. Plataforma e desempenho
+## 13. Plataforma e desempenho
 
 RF-PLT-01. Uma única interface serve computador, tablet e celular no navegador. A capa, o panorama do mês e o lançamento cabem e funcionam nos três, sem depender de hover.
 
@@ -278,7 +259,7 @@ RF-PLT-05. A capa pede o mês, não o histórico inteiro. Totais do mês são ca
 
 RF-PLT-06. Valores são inteiros em centavos. A tela formata em real.
 
-## 15. Modelo conceitual
+## 14. Modelo conceitual
 
 Estes são os conceitos, não o desenho do banco.
 
@@ -291,10 +272,9 @@ Estes são os conceitos, não o desenho do banco.
 - **Série.** Regra mensal, semanal ou diária que gera lançamentos.
 - **Empréstimo.** Contrato que gera uma série de parcelas e guarda a evolução.
 - **Meta.** Alvo com data, desafio mensal e histórico.
-- **Simulação.** Hipótese temporária sobre o panorama.
 - **Perfil da empresa.** Teto, atividades do DAS e situação da declaração, só no contexto jurídico.
 
-## 16. Fora deste requisito
+## 15. Fora deste requisito
 
 - Open Finance, lista obrigatória de bancos e importação automática de extrato.
 - Fatura automática de cartão, com fechamento e vencimento calculados.
@@ -305,7 +285,7 @@ Estes são os conceitos, não o desenho do banco.
 - Cobrança de assinatura do próprio Finances.
 - Publicação nas lojas. O requisito só impede decisões que bloqueiem essa publicação.
 
-## 17. Critério de aceite por área
+## 16. Critério de aceite por área
 
 - **Contextos.** Com os dois ligados, um lançamento da pessoa física não aparece na pessoa jurídica, e o alternador troca o panorama na hora.
 - **Capa.** No dia 1 estão visíveis o saldo (entradas − saídas − investimentos), as entradas, as saídas, as pendências e os investimentos, além de todos os dias do mês. Dá para apontar o saldo do último dia.
@@ -313,12 +293,11 @@ Estes são os conceitos, não o desenho do banco.
 - **Série.** Uma parcela de 5 meses gera 5 previstos. Alterar só um não muda os outros. Alterar todas não muda o que já foi pago.
 - **Empréstimo.** Valor, taxa mensal e prazo produzem a parcela Price e a tabela até o saldo zerar. Pagar uma parcela reduz o saldo devedor.
 - **Meta.** Com alvo e data, o sistema diz o valor do mês. A pessoa informa quanto guardou. Um mês abaixo aumenta o desafio dos meses seguintes e mantém o alvo.
-- **Simulação.** Incluir uma parcela hipotética muda o panorama e não cria lançamento até a pessoa confirmar.
 - **Empresa.** O faturamento do ano comparado ao teto de R$ 81.000,00 dispara os três alertas nos pontos certos. O DAS de um mês pode ser marcado como pago.
 - **Acesso.** Sem login a capa não abre. Usuário de um espaço não vê outro espaço.
 - **Plataforma.** A capa é utilizável no celular e é instalável pelo Chrome.
 
-## 18. Referências
+## 17. Referências
 
 - Teto do MEI e proposta ainda não vigente: [gov.br/memp/pt-br/teto-do-mei](https://www.gov.br/memp/pt-br/teto-do-mei)
 - DAS 2026: [Receita Federal, Simples Nacional, 02/01/2026](https://www8.receita.fazenda.gov.br/simPlesnacional/Noticias/NoticiaCompleta.aspx?id=c3b2044c-ff97-432a-b33c-ecf2a3df6dc3) e [Agência Brasil](https://agenciabrasil.ebc.com.br/economia/noticia/2026-01/recolhimento-do-mei-sobe-para-r-8105-em-2026)
@@ -331,7 +310,7 @@ Estes são os conceitos, não o desenho do banco.
 - App instalável: [web.dev, install criteria](https://web.dev/articles/install-criteria)
 - Lojas a partir de um app web: [progressivewebapps.com, setembro de 2026](https://progressivewebapps.com/installation/app-stores/), inclusive a regra 4.2 da Apple contra site reempacotado
 
-## 19. Decisões fechadas
+## 18. Decisões fechadas
 
 Confirmadas em 18 de outubro de 2026:
 

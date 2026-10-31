@@ -204,10 +204,6 @@ input, select {
 .reais input:focus { outline: none; }
 label.check { display: flex; align-items: center; gap: 8px; }
 input[type="checkbox"] { width: 18px; height: 18px; padding: 0; accent-color: var(--green); }
-.pair { display: grid; grid-template-columns: 1fr 110px; gap: 12px; }
-.composer { max-width: 520px; }
-.result { margin-top: 14px; padding: 14px 16px; border-radius: 14px; background: #f6f1e8; }
-.result strong { font-family: var(--serif); font-size: 28px; }
 .auth { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
 .auth .card { width: min(420px, 100%); padding: 28px; gap: 14px; }
 .error { color: var(--copper); margin: 0; }
@@ -240,7 +236,7 @@ input[type="checkbox"] { width: 18px; height: 18px; padding: 0; accent-color: va
   .nowrap { white-space: nowrap; }
   .nav { mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
   h1 { font-size: 32px; }
-  .bento, .form-grid, .pair, .das-row { grid-template-columns: 1fr; }
+  .bento, .form-grid, .das-row { grid-template-columns: 1fr; }
   .split { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
   .split strong { font-size: 16px; }
   .pending { grid-column: auto; }

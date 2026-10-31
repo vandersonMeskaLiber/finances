@@ -26,7 +26,6 @@ const titles = {
   tipos: "Tipo de lançamento",
   emprestimos: "Empréstimos",
   metas: "Metas",
-  simulacao: "Simulação",
   empresa: "Empresa",
   usuarios: "Acesso",
 };
@@ -39,7 +38,6 @@ const ledes = {
   tipos: "Você nomeia os tipos. Subtipo é opcional.",
   emprestimos: "Price ou SAC. Cada parcela vira uma saída no mês.",
   metas: "O quanto você guardou é informado na mão. O sistema não deduz sozinho.",
-  simulacao: "Uma parcela a mais neste mês, sem gravar nada.",
   empresa: "Acompanha o teto do MEI e o DAS. Não emite guia nem declaração.",
   usuarios: "Você administra o espaço e cria os demais acessos.",
 };
@@ -106,7 +104,6 @@ function render() {
     ["investimentos", "Investimentos"],
     ["emprestimos", "Empréstimos"],
     ["metas", "Metas"],
-    ["simulacao", "Simulação"],
     ["tipos", "Tipo de lançamento"],
     ["contas", "Contas bancárias"],
   ];
@@ -152,7 +149,7 @@ function render() {
   document.querySelector("#prev").onclick = () => shiftMonth(-1);
   document.querySelector("#next").onclick = () => shiftMonth(1);
   const create = document.querySelector("#create");
-  create.hidden = state.view === "simulacao" || state.view === "empresa";
+  create.hidden = state.view === "empresa";
   create.onclick = () => openCreate();
   bindView();
 }
@@ -189,7 +186,7 @@ async function switchContext(event, next) {
   }
 }
 
-const views = { capa: renderCapa, contas: renderContas, lancamentos: renderLancamentos, investimentos: renderInvestimentos, tipos: renderTipos, emprestimos: renderEmprestimos, metas: renderMetas, simulacao: renderSimulacao, empresa: renderEmpresa, usuarios: renderUsuarios };
+const views = { capa: renderCapa, contas: renderContas, lancamentos: renderLancamentos, investimentos: renderInvestimentos, tipos: renderTipos, emprestimos: renderEmprestimos, metas: renderMetas, empresa: renderEmpresa, usuarios: renderUsuarios };
 
 function renderCapa() {
   const summary = state.summary;
@@ -397,17 +394,6 @@ function renderMetas() {
   return `<article class="panel">${rows || empty("Nenhuma meta", "Defina o alvo e a data. Se um mês ficar curto, o desafio dos meses seguintes sobe.")}</article>`;
 }
 
-function renderSimulacao() {
-  return `<article class="panel"><form id="sim-form" class="fields composer">
-    <div class="pair">
-      <label>Parcela hipotética<span class="reais"><span>R$</span><input name="amount" inputmode="numeric" autocomplete="off" placeholder="0,00"></span></label>
-      <label>Dia<input name="day" type="number" min="1" max="31" value="10"></label>
-    </div>
-    <label>Descrição<input name="description" value="Parcela nova"></label>
-    <button class="primary" type="submit">Simular</button>
-  </form><div id="sim-result"></div></article>`;
-}
-
 function renderEmpresa() {
   const company = state.company;
   if (!company) return `<article class="panel"><p>A empresa fica no contexto de pessoa jurídica.</p></article>`;
@@ -541,16 +527,8 @@ function bindView() {
   document.querySelectorAll("[data-goal]").forEach((button) => button.onclick = () => openGoal(find(state.goals, button.dataset.goal)));
   document.querySelectorAll("[data-goal-edit]").forEach((button) => button.onclick = () => openGoalEdit(find(state.goals, button.dataset.goalEdit)));
   document.querySelectorAll("[data-del-goal]").forEach((button) => button.onclick = () => removeGoal(find(state.goals, button.dataset.delGoal)));
-  const sim = document.querySelector("#sim-form");
   const company = document.querySelector("#company-form");
-  if (sim) bindReais(sim.amount);
   if (company && company.annual_limit) bindReais(company.annual_limit);
-  if (sim) sim.onsubmit = async (event) => {
-    event.preventDefault();
-    const amount = parseMoney(sim.amount.value);
-    const result = await api("/api/simulation", { method: "POST", body: JSON.stringify({ context: state.context, month: state.month, extras: amount ? [{ direction: "saida", amount, day: Number(sim.day.value), description: sim.description.value }] : [] }) });
-    document.querySelector("#sim-result").innerHTML = `<div class="result"><span class="tag">Saldo do último dia</span><strong class="${result.last_balance < 0 ? "negative" : "positive"}">${money(result.last_balance)}</strong><p class="tag">${result.zero_day ? `Fica negativo em ${formatDate(result.zero_day)}.` : "Não fica negativo."} Saídas do mês: ${money(result.saida)}.</p></div>`;
-  };
   if (company) company.onsubmit = async (event) => {
     event.preventDefault();
     const custom = company.kind.value === "custom";
@@ -587,7 +565,7 @@ function bindView() {
 }
 
 function openCreate() {
-  const actions = { capa: openTransaction, contas: () => openAccount(), lancamentos: openTransaction, investimentos: () => openTransaction(null, "investimento"), tipos: openCategory, emprestimos: openLoanForm, metas: openGoalForm, simulacao: () => {}, empresa: () => {}, usuarios: openUser };
+  const actions = { capa: openTransaction, contas: () => openAccount(), lancamentos: openTransaction, investimentos: () => openTransaction(null, "investimento"), tipos: openCategory, emprestimos: openLoanForm, metas: openGoalForm, empresa: () => {}, usuarios: openUser };
   actions[state.view]();
 }
 

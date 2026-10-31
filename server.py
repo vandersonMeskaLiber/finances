@@ -176,8 +176,6 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, {"ok": True})
             elif method == "PUT" and len(parts) == 5 and parts[1] == "goals":
                 self._send(200, db.save_goal_month(int(parts[2]), parts[4], payload.get("saved")))
-            elif method == "POST" and parsed.path == "/api/simulation":
-                self._send(200, db.panorama(context, payload.get("month"), extras=payload.get("extras") or []))
             elif method == "PUT" and parsed.path == "/api/context":
                 self._send(200, db.set_last_context(user["id"], payload.get("context")))
             elif method == "PUT" and parsed.path == "/api/contexts":
