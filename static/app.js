@@ -599,15 +599,9 @@ function openTransaction(existing, preset) {
   const title = existing ? "Editar lançamento" : item.direction === "investimento" ? "Novo investimento" : "Novo lançamento";
   modal(`<form id="form"><h2>${title}</h2>
     <label>Direção<select name="direction">${["saida", "entrada", "investimento", "transferencia"].map((direction) => `<option value="${direction}" ${item.direction === direction ? "selected" : ""}>${labelDirection(direction)}</option>`).join("")}</select></label>
+    <label>Descrição<input name="description" value="${escapeHtml(item.description || "")}"></label>
     <label>Valor<span class="reais"><span>R$</span><input name="amount" inputmode="numeric" autocomplete="off" placeholder="0,00" required value="${existing ? formatReaisInput(existing.amount) : ""}"></span></label>
     <label>Data<input type="date" name="occurred_on" required value="${item.occurred_on}"></label>
-    <label>Descrição<input name="description" value="${escapeHtml(item.description || "")}"></label>
-    <label>Conta<select name="account_id">${options(state.accounts.filter((account) => account.active), item.account_id)}</select></label>
-    <label id="dest">Conta de destino<select name="transfer_account_id">${options(state.accounts.filter((account) => account.active), item.transfer_account_id)}</select></label>
-    <label id="kind">Tipo<select name="category_id"></select></label>
-    <label id="sub">Subtipo<select name="subcategory_id"></select></label>
-    <label>Situação<select name="status"><option value="previsto">Previsto</option><option value="efetivado" ${item.status === "efetivado" ? "selected" : ""}>Efetivado</option></select></label>
-    <label id="revenue" class="check"><input type="checkbox" name="counts_as_revenue" ${item.counts_as_revenue !== 0 ? "checked" : ""}> Entra no faturamento</label>
     <label id="repeat-kind">Repetir<select name="repeat" ${existing && existing.series_id ? "disabled" : ""}>
       <option value="">Não repetir</option>
       <option value="month" ${existing && existing.series_id && (existing.series_frequency || "month") === "month" ? "selected" : ""}>Todo mês</option>
@@ -615,6 +609,12 @@ function openTransaction(existing, preset) {
       <option value="day" ${existing && existing.series_frequency === "day" ? "selected" : ""}>Todo dia</option>
     </select></label>
     <label id="repeat-count"><span id="repeat-label">Por quantos meses</span><input name="repeat_count" inputmode="numeric" placeholder="Vazio segue por 60 meses"></label>
+    <label>Conta<select name="account_id">${options(state.accounts.filter((account) => account.active), item.account_id)}</select></label>
+    <label id="dest">Conta de destino<select name="transfer_account_id">${options(state.accounts.filter((account) => account.active), item.transfer_account_id)}</select></label>
+    <label id="kind">Tipo<select name="category_id"></select></label>
+    <label id="sub">Subtipo<select name="subcategory_id"></select></label>
+    <label>Situação<select name="status"><option value="previsto">Previsto</option><option value="efetivado" ${item.status === "efetivado" ? "selected" : ""}>Efetivado</option></select></label>
+    <label id="revenue" class="check"><input type="checkbox" name="counts_as_revenue" ${item.counts_as_revenue !== 0 ? "checked" : ""}> Entra no faturamento</label>
     ${existing && existing.series_id ? `<label>Aplicar em<select name="scope"><option value="this">Só este lançamento</option><option value="all">Todas as ocorrências ainda não efetivadas</option></select></label>` : ""}
     <p class="error" id="error" hidden></p>
     <div class="row"><button type="button" id="cancel" class="ghost">Cancelar</button>${existing ? `<button type="button" id="erase" class="danger">Apagar</button>` : ""}${existing ? `<button type="button" id="drop" class="ghost">Cancelar lançamento</button>` : ""}<button class="primary" type="submit">Salvar</button></div>
